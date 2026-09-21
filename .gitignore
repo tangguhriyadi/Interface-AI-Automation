@@ -1,0 +1,6 @@
+.env
+docs/plans/
+PRPs/
+
+# Claude Code local state (machine-specific)
+.claude/settings.local.json
