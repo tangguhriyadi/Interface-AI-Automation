@@ -5,9 +5,9 @@
   "type": "module",
   "description": "Fake credit-union servicing console used as the black-box UI target for the interface.ai take-home automation agent.",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc --noEmit",
-    "start": "tsx src/server.ts",
+    "start": "tsx --env-file=.env src/server.ts",
     "test": "vitest run"
   },
   "dependencies": {

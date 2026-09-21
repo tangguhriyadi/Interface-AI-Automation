@@ -1,0 +1,30 @@
+{
+  "10001": {
+    "memberId": "10001",
+    "name": "Elena Cho",
+    "status": "active",
+    "accounts": { "savings": 123456, "checking": 45678 },
+    "subAccounts": []
+  },
+  "10006": {
+    "memberId": "10006",
+    "name": "Marcus Webb",
+    "status": "active",
+    "accounts": { "savings": 987654, "checking": 12300 },
+    "subAccounts": []
+  },
+  "10007": {
+    "memberId": "10007",
+    "name": "Priya Natarajan",
+    "status": "active",
+    "accounts": { "savings": 50000, "checking": 250075 },
+    "subAccounts": []
+  },
+  "10008": {
+    "memberId": "10008",
+    "name": "Jonah Reyes",
+    "status": "active",
+    "accounts": { "savings": 302010, "checking": 8899 },
+    "subAccounts": []
+  }
+}
