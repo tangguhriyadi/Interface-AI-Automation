@@ -1,36 +1,21 @@
 import { Router } from "express";
 import type { Config } from "../config.js";
 import { getMember } from "../data/memberStore.js";
-import { resolveBehavior } from "../failureInjection.js";
+import { checkFailureInjection, renderNotFound } from "./memberLookup.js";
 import { createRequireAuth, dismissInterstitial, hasDismissedInterstitial } from "../session.js";
 import { renderBalancePanel } from "../views/balancePanel.js";
 import { renderInterstitialPage } from "../views/interstitial.js";
 import { renderMemberDetailPage } from "../views/memberDetailPage.js";
-import { renderMessagePage } from "../views/messagePage.js";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function renderAccessDenied(memberId: string): string {
-  return renderMessagePage({
-    title: "Access Denied",
-    message: `Access to member ${memberId} is restricted.`,
-  });
-}
-
-function renderServerError(): string {
-  return renderMessagePage({
-    title: "Server Error",
-    message: "Something went wrong while retrieving this member. Please try again.",
-  });
-}
-
 /**
- * Owns every failure-injection branch for a member lookup, keyed by ID
- * (see failureInjection.ts). This is the single place that decides
- * business-outcome vs. hard-failure vs. recoverable-interstitial vs. normal,
- * so search and any other entry point just redirect here.
+ * Handles the recoverable-in-place conditions (interstitial, slow load) and
+ * the final fixture lookup for a member lookup. The deterministic
+ * invalid/denied/error/not-found outcomes are owned by memberLookup.ts so
+ * every route that resolves a member ID reaches the same outcome.
  */
 export function createMemberRouter(config: Config): Router {
   const router = Router();
@@ -38,33 +23,14 @@ export function createMemberRouter(config: Config): Router {
 
   router.get("/members/:memberId", requireAuth, async (req, res) => {
     const memberIdParam = req.params.memberId ?? "";
-    const behavior = resolveBehavior(memberIdParam);
+    const check = checkFailureInjection(memberIdParam);
 
-    if (behavior === "invalid_input") {
-      res
-        .status(200)
-        .send(renderMessagePage({ title: "Invalid Input", message: "Member ID must contain only digits." }));
+    if (check.outcome === "render") {
+      res.status(check.status).send(check.body);
       return;
     }
 
-    if (behavior === "not_found") {
-      res
-        .status(200)
-        .send(renderMessagePage({ title: "Member Not Found", message: `No member matches ID ${memberIdParam}.` }));
-      return;
-    }
-
-    if (behavior === "access_denied") {
-      res.status(200).send(renderAccessDenied(memberIdParam));
-      return;
-    }
-
-    if (behavior === "server_error") {
-      res.status(500).send(renderServerError());
-      return;
-    }
-
-    if (behavior === "maintenance_interstitial" && !hasDismissedInterstitial(req.session, memberIdParam)) {
+    if (check.behavior === "maintenance_interstitial" && !hasDismissedInterstitial(req.session, memberIdParam)) {
       res
         .status(200)
         .send(
@@ -75,15 +41,13 @@ export function createMemberRouter(config: Config): Router {
       return;
     }
 
-    if (behavior === "slow_load") {
+    if (check.behavior === "slow_load") {
       await delay(config.slowLoadMs);
     }
 
     const member = getMember(memberIdParam.trim());
     if (!member) {
-      res
-        .status(200)
-        .send(renderMessagePage({ title: "Member Not Found", message: `No member matches ID ${memberIdParam}.` }));
+      res.status(200).send(renderNotFound(memberIdParam));
       return;
     }
 
@@ -98,21 +62,16 @@ export function createMemberRouter(config: Config): Router {
 
   router.get("/members/:memberId/balance", requireAuth, (req, res) => {
     const memberIdParam = req.params.memberId ?? "";
-    const behavior = resolveBehavior(memberIdParam);
+    const check = checkFailureInjection(memberIdParam);
 
-    if (behavior === "access_denied") {
-      res.status(200).send(renderAccessDenied(memberIdParam));
-      return;
-    }
-
-    if (behavior === "server_error") {
-      res.status(500).send(renderServerError());
+    if (check.outcome === "render") {
+      res.status(check.status).send(check.body);
       return;
     }
 
     const member = getMember(memberIdParam.trim());
     if (!member) {
-      res.status(200).send(renderMessagePage({ title: "Member Not Found", message: "No balance data available." }));
+      res.status(200).send(renderNotFound(memberIdParam));
       return;
     }
     res.status(200).send(renderBalancePanel({ accounts: member.accounts }));

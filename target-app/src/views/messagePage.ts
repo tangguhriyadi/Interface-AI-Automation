@@ -14,6 +14,6 @@ export interface MessagePageOptions {
 export function renderMessagePage({ title, message }: MessagePageOptions): string {
   return renderPage({
     title,
-    bodyHtml: `        <p>${escapeHtml(message)}</p>\n`,
+    bodyHtml: `        <p role="alert">${escapeHtml(message)}</p>\n`,
   });
 }

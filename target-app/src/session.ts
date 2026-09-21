@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import session from "express-session";
 import type { Express, NextFunction, Request, RequestHandler, Response } from "express";
 import type { Session, SessionData } from "express-session";
@@ -9,6 +10,7 @@ declare module "express-session" {
     username?: string;
     requestCount?: number;
     dismissedInterstitials?: string[];
+    pendingSubAccountToken?: string;
   }
 }
 
@@ -62,4 +64,26 @@ export function dismissInterstitial(session: SessionLike, memberId: string): voi
   if (!hasDismissedInterstitial(session, memberId)) {
     session.dismissedInterstitials = [...(session.dismissedInterstitials ?? []), memberId];
   }
+}
+
+/** Issues a one-time token for a just-rendered review step, replacing any prior pending token. */
+export function issuePendingSubAccountToken(session: SessionLike): string {
+  const token = randomUUID();
+  session.pendingSubAccountToken = token;
+  return token;
+}
+
+/**
+ * Consumes the pending token if `submittedToken` matches, so a second
+ * confirm submit (double-click, refresh, replay) can never succeed twice.
+ * A missing or mismatched token leaves session state untouched and returns
+ * false — the caller treats that identically to an already-consumed token.
+ */
+export function consumePendingSubAccountToken(session: SessionLike, submittedToken: string): boolean {
+  const expected = session.pendingSubAccountToken;
+  if (!expected || submittedToken !== expected) {
+    return false;
+  }
+  delete session.pendingSubAccountToken;
+  return true;
 }
