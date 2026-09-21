@@ -26,5 +26,19 @@
     "status": "active",
     "accounts": { "savings": 302010, "checking": 8899 },
     "subAccounts": []
+  },
+  "10003": {
+    "memberId": "10003",
+    "name": "Dana Okafor",
+    "status": "active",
+    "accounts": { "savings": 415000, "checking": 62050 },
+    "subAccounts": []
+  },
+  "10004": {
+    "memberId": "10004",
+    "name": "Sam Delacroix",
+    "status": "active",
+    "accounts": { "savings": 77000, "checking": 133345 },
+    "subAccounts": []
   }
 }

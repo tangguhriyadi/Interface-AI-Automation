@@ -50,3 +50,8 @@ ${bodyHtml}
 export function labeledRow(label: string, value: string): string {
   return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`;
 }
+
+/** A real, submittable logout control shared by every protected page. */
+export function logoutForm(): string {
+  return `<form method="post" action="/logout"><button type="submit">Log Out</button></form>`;
+}
