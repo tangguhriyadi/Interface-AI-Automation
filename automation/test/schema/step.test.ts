@@ -112,4 +112,26 @@ describe("StepSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a per-step checkpoint, independent of the capability's successCheckpoint", () => {
+    const result = StepSchema.safeParse({
+      id: "click-search",
+      action: "click",
+      classification: "safe",
+      target: roleTarget,
+      checkpoint: { kind: "heading_starts_with", text: "Member:" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a per-step checkpoint that isn't a valid Checkpoint shape", () => {
+    const result = StepSchema.safeParse({
+      id: "click-search",
+      action: "click",
+      classification: "safe",
+      target: roleTarget,
+      checkpoint: { kind: "not_a_real_kind" },
+    });
+    expect(result.success).toBe(false);
+  });
 });

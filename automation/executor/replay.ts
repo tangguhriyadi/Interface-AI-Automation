@@ -41,6 +41,7 @@ export type ErrorClass =
   | "http_error"
   | "session_expired"
   | "locator_not_found"
+  | "step_checkpoint_not_met"
   | "checkpoint_not_met"
   | "recovery_exhausted"
   | "recovery_action_failed";
@@ -129,8 +130,15 @@ function translateLocatorChain(chain: LocatorChain, overlay: TenantOverlay | und
   });
 }
 
-function isWithinAllowlist(allowlist: AppProfile["allowlist"], url: string): boolean {
-  if (!url.startsWith(allowlist.originPattern)) {
+/**
+ * `origin` defaults to the app profile's own `originPattern`, but a tenant
+ * can legitimately run on a different origin (its own subdomain/port) —
+ * when a tenant overlay is in play, its `baseUrl` is the authoritative
+ * origin for *this* replay run, not the app profile's default. Route
+ * prefixes stay app-level either way; only the origin is tenant-specific.
+ */
+function isWithinAllowlist(allowlist: AppProfile["allowlist"], origin: string, url: string): boolean {
+  if (!url.startsWith(origin)) {
     return false;
   }
   const pathname = new URL(url).pathname;
@@ -158,6 +166,7 @@ export async function replay(
   const allowIrreversible = options.allowIrreversible ?? false;
   const perRuleLimit = options.recoveryLimits?.perRule ?? DEFAULT_RECOVERY_LIMIT_PER_RULE;
   const overallLimit = options.recoveryLimits?.overall ?? DEFAULT_RECOVERY_LIMIT_OVERALL;
+  const allowlistOrigin = options.tenantOverlay?.baseUrl ?? appProfile.allowlist.originPattern;
 
   const stepRecords: StepRecord[] = [];
   const recoveriesSeen = new Set<string>();
@@ -206,11 +215,11 @@ export async function replay(
       const snapshot = await adapter.snapshot();
       const mainFrame = snapshot.frames.find((f) => f.frameId === "main");
 
-      if (mainFrame && !isWithinAllowlist(appProfile.allowlist, mainFrame.url)) {
+      if (mainFrame && !isWithinAllowlist(appProfile.allowlist, allowlistOrigin, mainFrame.url)) {
         return {
           terminal: classify(params.step, {
             stepId: params.step?.id ?? "(entry)",
-            expected: `a URL within the allowlist (origin "${appProfile.allowlist.originPattern}", routes ${appProfile.allowlist.routePrefixes.join(", ")})`,
+            expected: `a URL within the allowlist (origin "${allowlistOrigin}", routes ${appProfile.allowlist.routePrefixes.join(", ")})`,
             observed: "landed outside the allowlisted origin/routes",
             errorClass: "allowlist_violation",
           }),
@@ -291,6 +300,23 @@ export async function replay(
       }
       if (recovered) {
         continue;
+      }
+
+      // A step's own checkpoint (if declared) is checked for every transition, not just
+      // the final one — independent of `capability.successCheckpoint`, which only ever
+      // runs on the last step. Without this, a mid-flow step that lands on the wrong
+      // page would go undetected as long as the *final* page happened to still satisfy
+      // the overall checkpoint.
+      if (params.step?.checkpoint && !evaluateCheckpoint(params.step.checkpoint, snapshot)) {
+        return {
+          terminal: classify(params.step, {
+            stepId: params.step.id,
+            expected: `step "${params.step.id}"'s own checkpoint (${params.step.checkpoint.kind})`,
+            observed: describeCheckpointMiss(params.step.checkpoint, snapshot),
+            errorClass: "step_checkpoint_not_met",
+          }),
+          recoveriesFired,
+        };
       }
 
       if (params.checkCheckpoint && !evaluateCheckpoint(capability.successCheckpoint, snapshot)) {

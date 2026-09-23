@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "1.0.0",
+  "capabilityId": "lookup_member_savings_balance",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "description": "Logs in, searches for a member by ID, and reads their savings balance from the Account Balance panel.",
+  "entryPoint": "/login",
+  "inputs": {
+    "username": {
+      "type": "string",
+      "sensitivity": "none",
+      "description": "Test operator login username."
+    },
+    "password": {
+      "type": "string",
+      "sensitivity": "secret",
+      "description": "Test operator login password."
+    },
+    "memberId": {
+      "type": "string",
+      "sensitivity": "pii",
+      "description": "The member ID to search for."
+    }
+  },
+  "outputs": {
+    "memberName": {
+      "type": "string",
+      "sensitivity": "pii",
+      "description": "The member's full name, as displayed on the member detail page — lets the caller verify which record the balance belongs to."
+    },
+    "savingsBalance": {
+      "type": "string",
+      "sensitivity": "pii",
+      "description": "The member's savings balance, formatted as displayed (e.g. \"$1,234.56\")."
+    }
+  },
+  "steps": [
+    {
+      "id": "type-username",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true,
+          "rationale": "The Username field has a stable accessible name via its associated <label>."
+        }
+      ],
+      "value": { "fromInput": "username" }
+    },
+    {
+      "id": "type-password",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true,
+          "rationale": "The Password field has a stable accessible name via its associated <label>."
+        }
+      ],
+      "value": { "fromInput": "password" }
+    },
+    {
+      "id": "click-log-in",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Log In",
+          "exact": true,
+          "rationale": "The only submit control on the login form."
+        },
+        {
+          "kind": "css",
+          "selector": "form[action=\"/login\"] button[type=submit]",
+          "brittle": true,
+          "rationale": "Fallback if the button's accessible name ever changes; scoped to the login form specifically to avoid matching an unrelated submit button."
+        }
+      ]
+    },
+    {
+      "id": "type-member-id",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Member ID",
+          "exact": true,
+          "rationale": "The search field's accessible name for the default tenant; overridden to \"Account Number\" for the beta tenant via the tenant overlay."
+        }
+      ],
+      "value": { "fromInput": "memberId" }
+    },
+    {
+      "id": "click-search",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Search",
+          "exact": true,
+          "rationale": "The search form's submit control for the default tenant; overridden to \"Find\" for the beta tenant via the tenant overlay."
+        }
+      ],
+      "checkpoint": {
+        "kind": "heading_starts_with",
+        "text": "Member:"
+      }
+    },
+    {
+      "id": "read-member-name",
+      "action": "read",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "structural",
+          "description": "the value cell in the row whose row header is \"Name\"",
+          "rowHeader": "Name",
+          "rationale": "The name value cell has no accessible name of its own (mirrors the balance panel's row-header pattern) — the row header is the only reliable, non-positional signal."
+        }
+      ],
+      "outputName": "memberName"
+    },
+    {
+      "id": "read-savings-balance",
+      "action": "read",
+      "classification": "safe",
+      "frame": { "by": "title", "value": "Account Balance" },
+      "target": [
+        {
+          "kind": "structural",
+          "description": "the value cell in the row whose row header is \"Savings\"",
+          "rowHeader": "Savings",
+          "rationale": "The balance value cell has no accessible name of its own (evidence/accessibility-snapshot-spike/balance-panel.aria.yaml) — the row header is the only reliable, non-positional signal."
+        }
+      ],
+      "outputName": "savingsBalance"
+    }
+  ],
+  "successCheckpoint": {
+    "kind": "frame_present",
+    "frame": { "by": "title", "value": "Account Balance" }
+  },
+  "businessOutcomes": ["member_not_found", "access_denied", "invalid_input"]
+}

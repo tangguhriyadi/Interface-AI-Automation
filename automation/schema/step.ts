@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CheckpointSchema } from "./checkpoint.js";
 import { FrameRefSchema } from "./frame.js";
 import { LocatorChainSchema } from "./locator.js";
 
@@ -32,6 +33,16 @@ const baseStepFields = {
    * generic default timeout, not to any capability-specific number.
    */
   timeoutMs: z.number().int().positive().optional(),
+  /**
+   * An optional condition verified right after this specific step's own
+   * transition, independent of the capability's overall `successCheckpoint`
+   * (which is only ever checked on the final step). Exists because a
+   * mid-flow step landing on the wrong page — one that happens to
+   * incidentally satisfy the final checkpoint too — would otherwise go
+   * undetected until the end, or not at all. Same `Checkpoint` shape as
+   * `successCheckpoint`; evaluated by the same `evaluateCheckpoint`.
+   */
+  checkpoint: CheckpointSchema.optional(),
 };
 
 export const ClickStepSchema = z.object({

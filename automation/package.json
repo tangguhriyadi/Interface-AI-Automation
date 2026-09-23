@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run --exclude \"test/integration/**\"",
-    "test:integration": "vitest run test/integration"
+    "test:integration": "node --env-file=.env node_modules/vitest/dist/cli.js run test/integration"
   },
   "dependencies": {
     "playwright": "^1.47.0",

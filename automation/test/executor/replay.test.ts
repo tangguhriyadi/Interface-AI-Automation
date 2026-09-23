@@ -76,6 +76,51 @@ describe("replay — happy path", () => {
   });
 });
 
+describe("replay — per-step checkpoint (independent of the final successCheckpoint)", () => {
+  const stepCheckpointCapability: CapabilityArtifact = {
+    ...baseCapability,
+    steps: [
+      {
+        id: "click-go",
+        action: "click",
+        classification: "safe",
+        target: [role("button", "Go")],
+        checkpoint: { kind: "heading_starts_with", text: "Member:" },
+      },
+      baseCapability.steps[1]!,
+    ],
+  };
+
+  it("catches a wrong landing immediately, even though that page would satisfy the final successCheckpoint", async () => {
+    const adapter = new FakeAdapter();
+    // click-go lands on detailSnapshot ("Detail Page") — its heading starts with "Detail",
+    // which WOULD satisfy the capability's overall successCheckpoint
+    // ({ heading_starts_with: "Detail" }) — but click-go's own checkpoint requires
+    // "Member:", so this must be caught right here, not silently reach read-value.
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot];
+
+    const result = await replay(stepCheckpointCapability, appProfile, adapter, {});
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.errorClass).toBe("step_checkpoint_not_met");
+      expect(result.stepId).toBe("click-go");
+    }
+    expect(result.steps[0]).toMatchObject({ stepId: "click-go", outcome: "failed" });
+    expect(result.steps[1]).toMatchObject({ stepId: "read-value", outcome: "skipped" });
+  });
+
+  it("passes through cleanly when the step's own checkpoint is satisfied", async () => {
+    const adapter = new FakeAdapter();
+    const memberPage = snapshotOf('- \'heading "Member: Elena Cho" [level=1]\'', "http://localhost/detail");
+    adapter.snapshotQueue = [loginSnapshot, memberPage, detailSnapshot];
+
+    const result = await replay(stepCheckpointCapability, appProfile, adapter, {});
+
+    expect(result.status).toBe("success");
+  });
+});
+
 describe("replay — allowlist enforcement", () => {
   it("landing outside the allowlisted origin/routes is a failed result with errorClass allowlist_violation", async () => {
     const adapter = new FakeAdapter();
