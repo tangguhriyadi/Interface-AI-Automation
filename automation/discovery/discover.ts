@@ -2,7 +2,7 @@ import { evaluateCheckpoint } from "../adapter/matchers.js";
 import { findByRef, frameRefFor, resolveRef, type Snapshot, type SnapshotNode } from "../adapter/snapshotParser.js";
 import { LocatorResolutionError, type SurfaceAdapter } from "../adapter/surfaceAdapter.js";
 import { createAppDetector } from "../executor/appDetection.js";
-import { isIrreversibleControl } from "../executor/policy.js";
+import { isIrreversibleControl, isWithinAllowlist } from "../executor/policy.js";
 import { redactForLog } from "../executor/redact.js";
 import type { AppProfile } from "../schema/appProfile.js";
 import type { CapabilityArtifact, Sensitivity } from "../schema/capability.js";
@@ -59,7 +59,18 @@ type DiscoveryResultShape =
   /** A declared app-profile outcome matched for the specific inputs this session used — a recognized, understood condition (e.g. "Member Not Found" for this memberId), not a system failure. A re-run with different inputs might succeed; this run's goal wasn't reachable with these. */
   | { status: "business_outcome"; outcome: string }
   /** The app profile's session-expiry signal matched mid-run. Discovery has no re-authentication flow — this just ends the run rather than letting the model flail against a login wall it can't get past. */
-  | { status: "session_expired" };
+  | { status: "session_expired" }
+  /**
+   * A model-chosen click/type/select landed the main frame outside the app
+   * profile's allowlist. Discovery needs this even more than replay does:
+   * replay runs a fixed, human-reviewed artifact, but discovery is
+   * model-driven and can click any link on the page — without this check,
+   * an off-allowlist navigation could get recorded straight into the
+   * artifact as a permanent step.
+   */
+  | { status: "allowlist_violation"; url: string }
+  /** The main frame's last navigation returned a 5xx — checked before any page content is read, same as replay(). */
+  | { status: "http_error"; httpStatus: number };
 
 // `Omit`/intersection do not distribute over a union on their own — same trick executor/replay.ts uses for ReplayResult.
 type AddCommon<T> = T extends unknown ? T & DiscoveryResultCommon : never;
@@ -228,6 +239,10 @@ export async function discover(
   const recoveriesSeen = new Set<string>();
   const appDetector = createAppDetector(appProfile, adapter);
   const allOutcomeNames = Object.keys(appProfile.outcomes);
+  // No tenant-overlay concept in discovery (out of scope) — the app profile's own
+  // originPattern is always the authoritative allowlist origin here, unlike replay()
+  // which lets a tenant overlay's baseUrl override it.
+  const allowlistOrigin = appProfile.allowlist.originPattern;
   let stepCounter = 0;
   let previousSnapshot: Snapshot | undefined;
   let noOpStreak = 0;
@@ -295,8 +310,23 @@ export async function discover(
       return finalize({ status: "max_steps", stepsTaken: iteration - 1 });
     }
 
+    // Hard failure, checked before any page content is read — same as replay().
+    const navigationStatus = adapter.lastNavigationStatus();
+    if (navigationStatus !== undefined && navigationStatus >= 500) {
+      return finalize({ status: "http_error", httpStatus: navigationStatus });
+    }
+
     const rawSnapshot = await adapter.snapshot();
     const mainFrame = rawSnapshot.frames.find((f) => f.frameId === "main");
+
+    // Discovery needs this even more than replay does: replay runs a fixed, human-reviewed
+    // artifact, but discovery is model-driven and can click any link on the page — without
+    // this, an off-allowlist navigation could get recorded straight into the artifact as a
+    // permanent step.
+    if (mainFrame && !isWithinAllowlist(appProfile.allowlist, allowlistOrigin, mainFrame.url)) {
+      return finalize({ status: "allowlist_violation", url: mainFrame.url });
+    }
+
     const currentPath = mainFrame ? new URL(mainFrame.url).pathname : undefined;
     if (currentPath !== goal.entryPoint) {
       hasLeftEntryPoint = true;

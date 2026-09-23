@@ -404,3 +404,47 @@ describe("discover — a hung model call is bounded by the remaining timeout bud
     expect(result.status).toBe("timeout");
   });
 });
+
+describe("discover — an off-allowlist navigation ends discovery with allowlist_violation", () => {
+  it("stops the moment a model-chosen click lands the main frame outside the allowlist, before it could ever be recorded as a step", async () => {
+    const page1 = snapshotAt('- link "Somewhere else"\n');
+    const offAllowlistPage = snapshotOf('- heading "Elsewhere" [level=1]\n', "http://evil.example/start");
+
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page1, offAllowlistPage];
+
+    const model = new FakeModel();
+    model.turnQueue = [
+      { kind: "tool_call", call: { tool: "click", args: { frameId: "main", ref: refOf(page1, "link", "Somewhere else") } } },
+    ];
+
+    const result = await discover(baseGoal, baseAppProfile, adapter, model);
+
+    expect(result.status).toBe("allowlist_violation");
+    if (result.status === "allowlist_violation") {
+      expect(result.url).toBe("http://evil.example/start");
+    }
+    // Discovery stopped as soon as it saw the off-allowlist page — never asked the model
+    // what to do next, so there was no chance for a step to be recorded off the back of it.
+    expect(model.contextsSeen).toHaveLength(1);
+  });
+});
+
+describe("discover — a hard HTTP failure (5xx) ends discovery with http_error", () => {
+  it("stops before reading any page content, the same as replay()", async () => {
+    const page = snapshotAt('- button "A"\n');
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page];
+    adapter.navigationStatus = 502;
+
+    const model = new FakeModel(); // never called — the hard-failure check runs before the model does
+
+    const result = await discover(baseGoal, baseAppProfile, adapter, model);
+
+    expect(result.status).toBe("http_error");
+    if (result.status === "http_error") {
+      expect(result.httpStatus).toBe(502);
+    }
+    expect(model.contextsSeen).toHaveLength(0);
+  });
+});
