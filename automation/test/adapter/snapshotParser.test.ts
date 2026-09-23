@@ -89,6 +89,18 @@ describe("parseFrameSnapshot — synthetic edge cases", () => {
     expect(frame.nodes[0]?.children[0]?.text).toBe("Sample accessible name");
   });
 
+  it("captures a purely-numeric typed value as text, not silently dropping it — the YAML parser auto-types a bare `10001` as a number", () => {
+    const yaml = '- textbox "Member ID": 10001\n';
+    const frame = parseFrameSnapshot(yaml, { frameId: "main", url: "/x" });
+    expect(frame.nodes[0]?.text).toBe("10001");
+  });
+
+  it("captures a boolean-looking typed value as text the same way", () => {
+    const yaml = '- checkbox "Active": true\n';
+    const frame = parseFrameSnapshot(yaml, { frameId: "main", url: "/x" });
+    expect(frame.nodes[0]?.text).toBe("true");
+  });
+
   it("assigns sequential ordinals to repeated role+name siblings, and 0 to unique ones", () => {
     const yaml = [
       "- button \"OK\"",

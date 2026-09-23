@@ -1,4 +1,4 @@
-import { evaluateCheckpoint, headingText, matchesAnyShape } from "../adapter/matchers.js";
+import { evaluateCheckpoint, headingText } from "../adapter/matchers.js";
 import { LocatorResolutionError, type SurfaceAdapter } from "../adapter/surfaceAdapter.js";
 import type { Snapshot } from "../adapter/snapshotParser.js";
 import type { AppProfile } from "../schema/appProfile.js";
@@ -7,6 +7,7 @@ import type { Checkpoint } from "../schema/checkpoint.js";
 import type { LocatorChain, LocatorStrategy } from "../schema/locator.js";
 import type { Step } from "../schema/step.js";
 import type { TenantOverlay } from "../schema/tenantOverlay.js";
+import { createAppDetector } from "./appDetection.js";
 import { isWithinAllowlist } from "./policy.js";
 import { redactForLog } from "./redact.js";
 
@@ -97,15 +98,6 @@ export interface ReplayOptions {
 
 type TerminalOutcome = Exclude<ResultShape, { status: "success" }>;
 
-const DEFAULT_RECOVERY_LIMIT_PER_RULE = 3;
-const DEFAULT_RECOVERY_LIMIT_OVERALL = 10;
-/** Pure safety net — the recovery limits above should always trip first. */
-const MAX_TRANSITION_ITERATIONS = 50;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Translates a locator chain's control names through the tenant overlay
  * before it ever reaches the adapter — e.g. a chain recorded against the
@@ -150,14 +142,11 @@ export async function replay(
 ): Promise<ReplayResult> {
   const parsedInputs = buildInputsSchema(capability.inputs).parse(inputs);
   const allowIrreversible = options.allowIrreversible ?? false;
-  const perRuleLimit = options.recoveryLimits?.perRule ?? DEFAULT_RECOVERY_LIMIT_PER_RULE;
-  const overallLimit = options.recoveryLimits?.overall ?? DEFAULT_RECOVERY_LIMIT_OVERALL;
   const allowlistOrigin = options.tenantOverlay?.baseUrl ?? appProfile.allowlist.originPattern;
+  const appDetector = createAppDetector(appProfile, adapter, options.recoveryLimits);
 
   const stepRecords: StepRecord[] = [];
   const recoveriesSeen = new Set<string>();
-  const recoveryFireCounts = new Map<string, number>();
-  let overallRecoveryCount = 0;
   const outputs: Record<string, string> = {};
   // False-positive guard for session-expiry detection (below): only treat the app
   // profile's sessionExpiry shape as meaningful once we've actually left entryPoint at
@@ -182,145 +171,112 @@ export async function replay(
     step?: Step;
     checkCheckpoint: boolean;
   }): Promise<{ terminal?: TerminalOutcome; recoveriesFired: string[] }> {
-    const recoveriesFired: string[] = [];
-
-    for (let iteration = 0; iteration < MAX_TRANSITION_ITERATIONS; iteration++) {
-      const status = adapter.lastNavigationStatus();
-      if (status !== undefined && status >= 500) {
-        return {
-          terminal: classify(params.step, {
-            stepId: params.step?.id ?? "(entry)",
-            expected: "a 2xx/3xx response",
-            observed: `HTTP ${status}`,
-            errorClass: "http_error",
-          }),
-          recoveriesFired,
-        };
-      }
-
-      const snapshot = await adapter.snapshot();
-      const mainFrame = snapshot.frames.find((f) => f.frameId === "main");
-
-      if (mainFrame && !isWithinAllowlist(appProfile.allowlist, allowlistOrigin, mainFrame.url)) {
-        return {
-          terminal: classify(params.step, {
-            stepId: params.step?.id ?? "(entry)",
-            expected: `a URL within the allowlist (origin "${allowlistOrigin}", routes ${appProfile.allowlist.routePrefixes.join(", ")})`,
-            observed: "landed outside the allowlisted origin/routes",
-            errorClass: "allowlist_violation",
-          }),
-          recoveriesFired,
-        };
-      }
-
-      const currentPath = mainFrame ? new URL(mainFrame.url).pathname : undefined;
-      if (currentPath !== capability.entryPoint) {
-        hasLeftEntryPoint = true;
-      }
-
-      // Detected the same way as any outcome/recovery — an app-level detector shape,
-      // never inferred from entryPoint (that only worked here by coincidence, since
-      // this capability happens to start at /login; a capability starting at /search
-      // would never have detected an expiry redirect that way). The "have we left
-      // entryPoint" check stays as a false-positive guard, not the primary signal.
-      if (hasLeftEntryPoint && appProfile.sessionExpiry && matchesAnyShape(appProfile.sessionExpiry, snapshot)) {
-        return {
-          terminal: classify(params.step, {
-            stepId: params.step?.id ?? "(entry)",
-            expected: "the app profile's session-expiry signal not to match",
-            observed: "the app profile's session-expiry signal matched",
-            errorClass: "session_expired",
-          }),
-          recoveriesFired,
-        };
-      }
-
-      for (const outcomeName of capability.businessOutcomes) {
-        const detector = appProfile.outcomes[outcomeName];
-        if (detector && matchesAnyShape(detector.shapes, snapshot)) {
-          return { terminal: { status: "business_outcome", outcome: outcomeName }, recoveriesFired };
-        }
-      }
-
-      let recovered = false;
-      for (const rule of appProfile.recoveries) {
-        if (!matchesAnyShape(rule.detect, snapshot)) {
-          continue;
-        }
-        const ruleCount = (recoveryFireCounts.get(rule.name) ?? 0) + 1;
-        recoveryFireCounts.set(rule.name, ruleCount);
-        overallRecoveryCount += 1;
-
-        if (ruleCount > perRuleLimit || overallRecoveryCount > overallLimit) {
-          return {
-            terminal: classify(params.step, {
-              stepId: params.step?.id ?? "(entry)",
-              expected: `recovery "${rule.name}" to clear the condition within ${perRuleLimit} attempt(s)`,
-              observed: `recovery "${rule.name}" fired ${ruleCount} time(s) without clearing`,
-              errorClass: "recovery_exhausted",
-            }),
-            recoveriesFired,
-          };
-        }
-
-        try {
-          if (rule.action.kind === "dismiss") {
-            await adapter.click(rule.action.locator);
-          } else {
-            await sleep(rule.action.timeoutMs);
-          }
-        } catch {
-          return {
-            terminal: classify(params.step, {
-              stepId: params.step?.id ?? "(entry)",
-              expected: `recovery "${rule.name}"'s dismiss action to resolve`,
-              observed: `recovery "${rule.name}"'s dismiss locator did not resolve`,
-              errorClass: "recovery_action_failed",
-            }),
-            recoveriesFired,
-          };
-        }
-        recoveriesFired.push(rule.name);
-        recovered = true;
-        break;
-      }
-      if (recovered) {
-        continue;
-      }
-
-      // A step's own checkpoint (if declared) is checked for every transition, not just
-      // the final one — independent of `capability.successCheckpoint`, which only ever
-      // runs on the last step. Without this, a mid-flow step that lands on the wrong
-      // page would go undetected as long as the *final* page happened to still satisfy
-      // the overall checkpoint.
-      if (params.step?.checkpoint && !evaluateCheckpoint(params.step.checkpoint, snapshot)) {
-        return {
-          terminal: classify(params.step, {
-            stepId: params.step.id,
-            expected: `step "${params.step.id}"'s own checkpoint (${params.step.checkpoint.kind})`,
-            observed: describeCheckpointMiss(params.step.checkpoint, snapshot),
-            errorClass: "step_checkpoint_not_met",
-          }),
-          recoveriesFired,
-        };
-      }
-
-      if (params.checkCheckpoint && !evaluateCheckpoint(capability.successCheckpoint, snapshot)) {
-        return {
-          terminal: classify(params.step, {
-            stepId: params.step?.id ?? "(entry)",
-            expected: `the declared successCheckpoint (${capability.successCheckpoint.kind})`,
-            observed: describeCheckpointMiss(capability.successCheckpoint, snapshot),
-            errorClass: "checkpoint_not_met",
-          }),
-          recoveriesFired,
-        };
-      }
-
-      return { recoveriesFired };
+    const status = adapter.lastNavigationStatus();
+    if (status !== undefined && status >= 500) {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: "a 2xx/3xx response",
+          observed: `HTTP ${status}`,
+          errorClass: "http_error",
+        }),
+        recoveriesFired: [],
+      };
     }
 
-    throw new Error("internal: transition check exceeded its safety iteration cap");
+    const rawSnapshot = await adapter.snapshot();
+    const mainFrame = rawSnapshot.frames.find((f) => f.frameId === "main");
+
+    if (mainFrame && !isWithinAllowlist(appProfile.allowlist, allowlistOrigin, mainFrame.url)) {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: `a URL within the allowlist (origin "${allowlistOrigin}", routes ${appProfile.allowlist.routePrefixes.join(", ")})`,
+          observed: "landed outside the allowlisted origin/routes",
+          errorClass: "allowlist_violation",
+        }),
+        recoveriesFired: [],
+      };
+    }
+
+    const currentPath = mainFrame ? new URL(mainFrame.url).pathname : undefined;
+    if (currentPath !== capability.entryPoint) {
+      hasLeftEntryPoint = true;
+    }
+
+    const detection = await appDetector.detect(rawSnapshot, capability.businessOutcomes, hasLeftEntryPoint);
+
+    if (detection.kind === "session_expired") {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: "the app profile's session-expiry signal not to match",
+          observed: "the app profile's session-expiry signal matched",
+          errorClass: "session_expired",
+        }),
+        recoveriesFired: detection.recoveriesFired,
+      };
+    }
+    if (detection.kind === "business_outcome") {
+      return { terminal: { status: "business_outcome", outcome: detection.outcome }, recoveriesFired: detection.recoveriesFired };
+    }
+    if (detection.kind === "recovery_exhausted") {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: `recovery "${detection.ruleName}" to clear the condition`,
+          observed: `recovery "${detection.ruleName}" fired repeatedly without clearing`,
+          errorClass: "recovery_exhausted",
+        }),
+        recoveriesFired: detection.recoveriesFired,
+      };
+    }
+    if (detection.kind === "recovery_action_failed") {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: `recovery "${detection.ruleName}"'s dismiss action to resolve`,
+          observed: `recovery "${detection.ruleName}"'s dismiss locator did not resolve`,
+          errorClass: "recovery_action_failed",
+        }),
+        recoveriesFired: detection.recoveriesFired,
+      };
+    }
+
+    // detection.kind === "settled" — recoveries (if any) already dismissed; this is the
+    // final, settled snapshot to check the checkpoint(s) against.
+    const snapshot = detection.snapshot;
+
+    // A step's own checkpoint (if declared) is checked for every transition, not just
+    // the final one — independent of `capability.successCheckpoint`, which only ever
+    // runs on the last step. Without this, a mid-flow step that lands on the wrong
+    // page would go undetected as long as the *final* page happened to still satisfy
+    // the overall checkpoint.
+    if (params.step?.checkpoint && !evaluateCheckpoint(params.step.checkpoint, snapshot)) {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step.id,
+          expected: `step "${params.step.id}"'s own checkpoint (${params.step.checkpoint.kind})`,
+          observed: describeCheckpointMiss(params.step.checkpoint, snapshot),
+          errorClass: "step_checkpoint_not_met",
+        }),
+        recoveriesFired: detection.recoveriesFired,
+      };
+    }
+
+    if (params.checkCheckpoint && !evaluateCheckpoint(capability.successCheckpoint, snapshot)) {
+      return {
+        terminal: classify(params.step, {
+          stepId: params.step?.id ?? "(entry)",
+          expected: `the declared successCheckpoint (${capability.successCheckpoint.kind})`,
+          observed: describeCheckpointMiss(capability.successCheckpoint, snapshot),
+          errorClass: "checkpoint_not_met",
+        }),
+        recoveriesFired: detection.recoveriesFired,
+      };
+    }
+
+    return { recoveriesFired: detection.recoveriesFired };
   }
 
   function finalize(outcome: ResultShape): ReplayResult {
