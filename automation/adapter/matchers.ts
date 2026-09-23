@@ -1,4 +1,5 @@
 import type { DetectorShape } from "../schema/appProfile.js";
+import type { Checkpoint } from "../schema/checkpoint.js";
 import type { FrameRef } from "../schema/frame.js";
 import type { FrameSnapshot, Snapshot, SnapshotNode } from "./snapshotParser.js";
 
@@ -122,4 +123,18 @@ export function matchesShape(shape: DetectorShape, snapshot: Snapshot): boolean 
 /** Shapes within one outcome/recovery are OR'd — any one matching means the condition is detected. */
 export function matchesAnyShape(shapes: DetectorShape[], snapshot: Snapshot): boolean {
   return shapes.some((shape) => matchesShape(shape, snapshot));
+}
+
+/** Checkpoints are conditions (schema/checkpoint.ts), evaluated over the same tree. */
+export function evaluateCheckpoint(checkpoint: Checkpoint, snapshot: Snapshot): boolean {
+  switch (checkpoint.kind) {
+    case "heading_starts_with": {
+      const heading = headingText(snapshot, checkpoint.frame);
+      return heading !== undefined && heading.startsWith(checkpoint.text);
+    }
+    case "frame_present":
+      return frameExists(snapshot, checkpoint.frame);
+    case "text_contains":
+      return visibleTextContains(snapshot, checkpoint.text, checkpoint.frame);
+  }
 }

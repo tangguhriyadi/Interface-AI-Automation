@@ -78,6 +78,17 @@ export const AppProfileSchema = z.object({
   appId: z.string().min(1),
   outcomes: z.record(z.string(), OutcomeDetectorSchema),
   recoveries: z.array(RecoveryRuleSchema).default([]),
+  /**
+   * How this app signals an expired session — an app-level property, same
+   * as outcomes and recoveries, matched the same way (shapes OR'd
+   * together). Deliberately NOT inferred from a capability's `entryPoint`:
+   * that only works by coincidence when entryPoint happens to be the login
+   * page, and a capability starting anywhere else (e.g. "/search") would
+   * never detect an expiry redirect at all. Optional because not every app
+   * has sessions; when absent, the executor simply never detects expiry
+   * structurally (an unexplained state still surfaces as some other error).
+   */
+  sessionExpiry: z.array(DetectorShapeSchema).min(1).optional(),
   allowlist: AllowlistSchema,
 });
 export type AppProfile = z.infer<typeof AppProfileSchema>;

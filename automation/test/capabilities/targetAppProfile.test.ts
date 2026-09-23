@@ -27,6 +27,10 @@ describe("capabilities/fake-credit-union-console.app-profile.json", () => {
     expect(recovery?.action.kind).toBe("dismiss");
   });
 
+  it("declares an app-level sessionExpiry signal, not inferred from any one capability's entryPoint", () => {
+    expect(profile.sessionExpiry).toEqual([{ headingEquals: "Log In", roleAlertContains: "session expired" }]);
+  });
+
   it("scopes the allowlist to target-app's known routes", () => {
     expect(profile.allowlist.originPattern).toBe("http://localhost:4000");
     expect(profile.allowlist.routePrefixes).toEqual(["/login", "/search", "/members"]);

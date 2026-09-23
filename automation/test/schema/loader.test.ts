@@ -35,7 +35,7 @@ const validCapability = {
   appId: "fake-credit-union-console",
   entryPoint: "/login",
   inputs: { memberId: { type: "string", sensitivity: "pii" } },
-  outputs: { savingsBalance: { type: "string" } },
+  outputs: { savingsBalance: { type: "string", sensitivity: "pii" } },
   steps: [
     {
       id: "read-balance",

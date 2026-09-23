@@ -53,3 +53,21 @@ the evidence to prove that is on disk.
   condition, not a business outcome, and target-app doesn't wrap it in `role="alert"`. The
   app profile's recovery `detect` shape correctly uses `textContains`, not
   `roleAlertContains`, for this one.
+
+## Addendum: session-expiry signal (added after the initial verification pass)
+
+The executor originally inferred session expiry structurally (landing back on the
+capability's `entryPoint` path), which only works by coincidence when `entryPoint` happens
+to be `/login`. Fixed to use an explicit app-profile detector shape instead, matched the
+same way as any other outcome/recovery. Captured by starting target-app with
+`EXPIRE_SESSION_AFTER_REQUESTS=1` (an env-var override for this observation, not a code
+change) and making a second protected request — see `session-expired.aria.yaml`.
+
+| Signal | Observed |
+|---|---|
+| `headingEquals: "Log In"` | `heading "Log In" [level=1]` — **identical** to the plain login page |
+| `roleAlertContains: "session expired"` | `alert: Your session expired. Please log in again.` — the *only* distinguishing signal |
+
+This confirms the heading alone cannot distinguish "first visit to login" from "redirected
+here after expiry" — the `role="alert"` notice is load-bearing, not an arbitrary choice of
+signal.

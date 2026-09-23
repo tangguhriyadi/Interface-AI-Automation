@@ -2,7 +2,7 @@ import { chromium, type Browser, type FrameLocator, type Locator, type Page } fr
 import type { FrameRef } from "../schema/frame.js";
 import type { LocatorChain, LocatorStrategy } from "../schema/locator.js";
 import { parseFrameSnapshot, type Snapshot } from "./snapshotParser.js";
-import type { ActionResult, ReadResult, SurfaceAdapter } from "./surfaceAdapter.js";
+import { LocatorResolutionError, type ActionResult, type ReadResult, type SurfaceAdapter } from "./surfaceAdapter.js";
 
 function escapeAttributeValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -77,20 +77,36 @@ async function resolveLocator(
     }
     attempts.push(`${strategy.kind} (${strategy.rationale}): ${count} matches`);
   }
-  throw new Error(`No locator strategy in the chain resolved to exactly one element. Tried:\n${attempts.join("\n")}`);
+  throw new LocatorResolutionError(attempts);
 }
 
 export class PlaywrightAdapter implements SurfaceAdapter {
+  private navigationStatus: number | undefined;
+
   private constructor(
     private readonly browser: Browser,
     private readonly page: Page,
     private readonly baseUrl: string,
-  ) {}
+  ) {
+    // Tracks the final response of the most recent main-frame navigation, redirect
+    // chains included — a 302 intermediate hop gets overwritten by the response that
+    // follows it, so by the time an awaited action resolves this reflects where we
+    // actually ended up, not an intermediate redirect status.
+    this.page.on("response", (response) => {
+      if (response.request().isNavigationRequest() && response.frame() === this.page.mainFrame()) {
+        this.navigationStatus = response.status();
+      }
+    });
+  }
 
   static async launch(baseUrl: string): Promise<PlaywrightAdapter> {
     const browser = await chromium.launch();
     const page = await browser.newPage();
     return new PlaywrightAdapter(browser, page, baseUrl);
+  }
+
+  lastNavigationStatus(): number | undefined {
+    return this.navigationStatus;
   }
 
   async goto(path: string): Promise<void> {

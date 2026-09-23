@@ -1,0 +1,28 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance started with EXPIRE_SESSION_AFTER_REQUESTS=1 (an explicit env-var
+# override for this observation only, not a code change — permitted per
+# CLAUDE.md's hard boundary). Logged in, then made a second protected request
+# (submitting Search), which the app redirected to /login?expired=1, 2026-09-23.
+#
+# The heading is identical to the plain login page ("Log In") — the only
+# distinguishing signal is the role="alert" notice, which the plain login
+# page does not render at all.
+- table:
+  - rowgroup:
+    - row "Log In":
+      - cell "Log In":
+        - heading "Log In" [level=1]
+    - row "Username Password Log In":
+      - cell "Username Password Log In":
+        - alert: Your session expired. Please log in again.
+        - table:
+          - rowgroup:
+            - row "Username":
+              - cell "Username"
+              - cell:
+                - textbox "Username"
+            - row "Password":
+              - cell "Password"
+              - cell:
+                - textbox "Password"
+        - button "Log In"

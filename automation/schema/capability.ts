@@ -2,8 +2,9 @@ import { z } from "zod";
 import { CheckpointSchema } from "./checkpoint.js";
 import { StepSchema } from "./step.js";
 
-export const InputSensitivitySchema = z.enum(["secret", "pii", "none"]);
-export type InputSensitivity = z.infer<typeof InputSensitivitySchema>;
+/** Shared by inputs and outputs alike — a member name read off the page is exactly as much PII as one typed in. */
+export const SensitivitySchema = z.enum(["secret", "pii", "none"]);
+export type Sensitivity = z.infer<typeof SensitivitySchema>;
 
 /**
  * Declared inputs carry a sensitivity flag from the start (see redact.ts in
@@ -12,13 +13,21 @@ export type InputSensitivity = z.infer<typeof InputSensitivitySchema>;
  */
 export const InputSpecSchema = z.object({
   type: z.literal("string"),
-  sensitivity: InputSensitivitySchema,
+  sensitivity: SensitivitySchema,
   description: z.string().min(1).optional(),
 });
 export type InputSpec = z.infer<typeof InputSpecSchema>;
 
+/**
+ * Outputs carry the same sensitivity flag as inputs. The value still flows
+ * through unredacted in a `success` result's `outputs` — that's what the
+ * caller asked for — but anywhere else a read value might land (a log, a
+ * step record, an error message) it goes through redactForLog first, same
+ * as an input would.
+ */
 export const OutputSpecSchema = z.object({
   type: z.literal("string"),
+  sensitivity: SensitivitySchema,
   description: z.string().min(1).optional(),
 });
 export type OutputSpec = z.infer<typeof OutputSpecSchema>;

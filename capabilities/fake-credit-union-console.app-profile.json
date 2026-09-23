@@ -34,6 +34,12 @@
       ]
     }
   },
+  "sessionExpiry": [
+    {
+      "headingEquals": "Log In",
+      "roleAlertContains": "session expired"
+    }
+  ],
   "recoveries": [
     {
       "name": "maintenance_interstitial",

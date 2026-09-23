@@ -13,7 +13,7 @@ const validArtifact = {
     password: { type: "string", sensitivity: "secret" },
   },
   outputs: {
-    savingsBalance: { type: "string" },
+    savingsBalance: { type: "string", sensitivity: "pii" },
   },
   steps: [
     {
@@ -109,7 +109,7 @@ describe("CapabilityArtifactSchema", () => {
     const result = CapabilityArtifactSchema.safeParse({
       ...validArtifact,
       steps: [validArtifact.steps[0]],
-      outputs: { savingsBalance: { type: "string" }, checkingBalance: { type: "string" } },
+      outputs: { savingsBalance: { type: "string", sensitivity: "pii" }, checkingBalance: { type: "string", sensitivity: "pii" } },
     });
     expect(result.success).toBe(false);
   });
