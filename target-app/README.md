@@ -1,15 +1,15 @@
 # target-app
 
 Fake credit-union servicing console used as the black-box UI target for the
-interface.ai take-home automation agent (`/src`, built separately). Server-
+interface.ai take-home automation agent (`/automation`, built separately). Server-
 rendered, no client JS, native HTML controls throughout (`button`, `input`,
 `label for=`, `table`) so the accessibility tree yields real roles and
 accessible names — see the top-level project `CLAUDE.md` for the full design
-rationale and the hard boundary between this app and `/src`.
+rationale and the hard boundary between this app and `/automation`.
 
 ## Running it
 
-`/target-app` and `/src` are two independent npm projects — no workspace, no
+`/target-app` and `/automation` are two independent npm projects — no workspace, no
 shared `package.json`, no shared code. Run them in separate terminals.
 
 **Terminal 1 — this app:**
@@ -111,7 +111,7 @@ limit can expire strictly between them too. Critically: the sub-account is
 created inside the confirm handler *before* the redirect is issued, so if
 the limit trips exactly at that boundary, **the sub-account still gets
 created even though the user never sees the "Sub-Account Created" page** —
-they see a login redirect instead. A future `/src` agent must not treat "no
+they see a login redirect instead. A future `/automation` agent must not treat "no
 success page shown" as proof nothing happened; for an irreversible step like
 this one, that ambiguity is exactly the kind of case that should escalate
 rather than assume failure and retry.

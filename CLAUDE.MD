@@ -34,16 +34,16 @@ infrastructure is explicitly not rewarded. Simpler is better if justified.
 /README.md        setup + exact demo commands
 /REPORT.md        design write-up, seven fixed headings (see below)
 /evidence/        artifact + logs from a discovery run and replay runs
-/src/             the automation system (its own npm project)
+/automation/      the automation system (its own npm project)
 /target-app/      the fake servicing console the agent drives (done)
 /capabilities/    emitted artifacts, app profiles, tenant overlays
 ```
 
-`/src` and `/target-app` are two independent npm projects with their own
+`/automation` and `/target-app` are two independent npm projects with their own
 `package.json`. No workspaces.
 
-`/target-app` is finished and tested. Do not modify it while building `/src`
-unless I explicitly ask — if `/src` seems to need a change there, stop and
+`/target-app` is finished and tested. Do not modify it while building `/automation`
+unless I explicitly ask — if `/automation` seems to need a change there, stop and
 say so.
 
 `/REPORT.md` headings are fixed and must appear exactly: Architecture,
@@ -52,7 +52,7 @@ Escalation & handoff, Safety, Cuts.
 
 ## The hard boundary
 
-`/src/` must never import from, read the source of, or query the internals of
+`/automation/` must never import from, read the source of, or query the internals of
 `/target-app/`. No shared types, no shared fixtures, no reading its JSON data,
 no hitting its routes with plain HTTP to shortcut the UI. The target app is a
 black box that happens to live in the same repo — it stands in for a bank
