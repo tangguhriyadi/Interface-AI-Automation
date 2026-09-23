@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "tenantId": "beta",
+  "baseUrl": "http://localhost:4000",
+  "controlNameOverrides": {
+    "Member ID": "Account Number",
+    "Search": "Find"
+  }
+}

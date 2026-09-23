@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "outcomes": {
+    "member_not_found": {
+      "name": "member_not_found",
+      "shapes": [
+        {
+          "headingEquals": "Member Not Found",
+          "textContains": "No member matches ID"
+        }
+      ]
+    },
+    "access_denied": {
+      "name": "access_denied",
+      "shapes": [
+        {
+          "headingEquals": "Access Denied",
+          "textContains": "restricted"
+        }
+      ]
+    },
+    "invalid_input": {
+      "name": "invalid_input",
+      "shapes": [
+        {
+          "headingEquals": "Invalid Input",
+          "textContains": "must contain only digits"
+        },
+        {
+          "headingEquals": "Member Search",
+          "roleAlertContains": "Invalid Input"
+        }
+      ]
+    }
+  },
+  "recoveries": [
+    {
+      "name": "maintenance_interstitial",
+      "detect": [
+        {
+          "headingEquals": "System Maintenance",
+          "textContains": "scheduled maintenance"
+        }
+      ],
+      "action": {
+        "kind": "dismiss",
+        "locator": [
+          {
+            "kind": "role",
+            "role": "button",
+            "name": "Dismiss",
+            "rationale": "The interstitial's only control: a real button inside a real form."
+          }
+        ]
+      }
+    }
+  ],
+  "allowlist": {
+    "originPattern": "http://localhost:4000",
+    "routePrefixes": ["/login", "/search", "/members"]
+  }
+}

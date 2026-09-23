@@ -1,0 +1,10 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance (search -> memberId 99999 -> GET /members/99999, main frame), 2026-09-23.
+- table:
+  - rowgroup:
+    - row "Member Not Found":
+      - cell "Member Not Found":
+        - heading "Member Not Found" [level=1]
+    - row:
+      - cell:
+        - alert: No member matches ID 99999.

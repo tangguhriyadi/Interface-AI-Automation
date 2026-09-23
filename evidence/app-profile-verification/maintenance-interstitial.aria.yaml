@@ -1,0 +1,12 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance (search -> memberId 10003 -> GET /members/10003, before dismissing,
+# main frame), 2026-09-23.
+- table:
+  - rowgroup:
+    - row "System Maintenance":
+      - cell "System Maintenance":
+        - heading "System Maintenance" [level=1]
+    - row "The servicing console is undergoing scheduled maintenance. Some information may be temporarily unavailable. Dismiss":
+      - cell "The servicing console is undergoing scheduled maintenance. Some information may be temporarily unavailable. Dismiss":
+        - paragraph: The servicing console is undergoing scheduled maintenance. Some information may be temporarily unavailable.
+        - button "Dismiss"

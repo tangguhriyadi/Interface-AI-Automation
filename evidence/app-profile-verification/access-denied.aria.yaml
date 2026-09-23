@@ -1,0 +1,10 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance (search -> memberId 10002 -> GET /members/10002, main frame), 2026-09-23.
+- table:
+  - rowgroup:
+    - row "Access Denied":
+      - cell "Access Denied":
+        - heading "Access Denied" [level=1]
+    - row:
+      - cell:
+        - alert: Access to member 10002 is restricted.

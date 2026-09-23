@@ -1,0 +1,50 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { loadAppProfile, loadTenantOverlay } from "../../schema/loader.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const capabilitiesDir = join(__dirname, "..", "..", "..", "capabilities");
+
+describe("capabilities/fake-credit-union-console.app-profile.json", () => {
+  const profile = loadAppProfile(join(capabilitiesDir, "fake-credit-union-console.app-profile.json"));
+
+  it("is schema-valid and identifies the right app", () => {
+    expect(profile.appId).toBe("fake-credit-union-console");
+  });
+
+  it("declares member_not_found, access_denied, and the two-shape invalid_input outcome", () => {
+    expect(Object.keys(profile.outcomes).sort()).toEqual(["access_denied", "invalid_input", "member_not_found"]);
+    expect(profile.outcomes["invalid_input"]!.shapes).toHaveLength(2);
+  });
+
+  it("does NOT declare server_error as a business outcome — that's a structural HTTP-status failure, not a content-matched outcome", () => {
+    expect(profile.outcomes["server_error"]).toBeUndefined();
+  });
+
+  it("declares the maintenance_interstitial recovery with a dismiss action", () => {
+    const recovery = profile.recoveries.find((r) => r.name === "maintenance_interstitial");
+    expect(recovery?.action.kind).toBe("dismiss");
+  });
+
+  it("scopes the allowlist to target-app's known routes", () => {
+    expect(profile.allowlist.originPattern).toBe("http://localhost:4000");
+    expect(profile.allowlist.routePrefixes).toEqual(["/login", "/search", "/members"]);
+  });
+});
+
+describe("capabilities/fake-credit-union-console.beta.tenant-overlay.json", () => {
+  const overlay = loadTenantOverlay(join(capabilitiesDir, "fake-credit-union-console.beta.tenant-overlay.json"));
+
+  it("is schema-valid and targets the beta tenant", () => {
+    expect(overlay.appId).toBe("fake-credit-union-console");
+    expect(overlay.tenantId).toBe("beta");
+  });
+
+  it("overrides exactly the labels target-app's beta tenant renders", () => {
+    expect(overlay.controlNameOverrides).toEqual({
+      "Member ID": "Account Number",
+      Search: "Find",
+    });
+  });
+});

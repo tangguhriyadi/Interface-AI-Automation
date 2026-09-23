@@ -1,3 +1,4 @@
+import type { DetectorShape } from "../schema/appProfile.js";
 import type { FrameRef } from "../schema/frame.js";
 import type { FrameSnapshot, Snapshot, SnapshotNode } from "./snapshotParser.js";
 
@@ -86,4 +87,39 @@ export function visibleTextContains(snapshot: Snapshot, substring: string, frame
     return false;
   }
   return flattenText(frame.nodes).some((text) => text.includes(substring));
+}
+
+/**
+ * A shape is an AND of whichever signals it declares (schema/appProfile.ts).
+ * A signal the shape doesn't mention is simply not checked — declaring
+ * `roleAlertContains` makes an alert *required for this shape*, but a
+ * different shape for the same outcome that omits it still matches a page
+ * with no alert at all. That's how "never assume role=alert exists" stays
+ * true at the outcome level even though one specific shape can require it.
+ */
+export function matchesShape(shape: DetectorShape, snapshot: Snapshot): boolean {
+  if (shape.headingEquals !== undefined && headingText(snapshot, shape.frame) !== shape.headingEquals) {
+    return false;
+  }
+  if (shape.headingStartsWith !== undefined) {
+    const heading = headingText(snapshot, shape.frame);
+    if (!heading || !heading.startsWith(shape.headingStartsWith)) {
+      return false;
+    }
+  }
+  if (shape.textContains !== undefined && !visibleTextContains(snapshot, shape.textContains, shape.frame)) {
+    return false;
+  }
+  if (shape.roleAlertContains !== undefined) {
+    const alert = alertText(snapshot, shape.frame);
+    if (!alert || !alert.includes(shape.roleAlertContains)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Shapes within one outcome/recovery are OR'd — any one matching means the condition is detected. */
+export function matchesAnyShape(shapes: DetectorShape[], snapshot: Snapshot): boolean {
+  return shapes.some((shape) => matchesShape(shape, snapshot));
 }
