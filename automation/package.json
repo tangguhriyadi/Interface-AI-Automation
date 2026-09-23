@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Computer-use automation system core: capability/app-profile/tenant-overlay schemas, the Playwright surface adapter, and the deterministic replay executor.",
+  "description": "Computer-use automation system core: capability/app-profile/tenant-overlay schemas, the Playwright surface adapter, the deterministic replay executor, and the LLM-driven discovery loop.",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run --exclude \"test/integration/**\"",
     "test:integration": "node --env-file=.env node_modules/vitest/dist/cli.js run test/integration"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "playwright": "^1.47.0",
     "yaml": "^2.5.0",
     "zod": "^3.23.0"

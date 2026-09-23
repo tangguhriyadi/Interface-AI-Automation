@@ -157,4 +157,40 @@ describe("resolveRef", () => {
     const ref = snapshot.frames[0]!.nodes[0]!.ref;
     expect(() => resolveRef(snapshot, "main", ref)).toThrow(/no accessible name/);
   });
+
+  // Real shape, re-verified live against target-app's Account Balance panel
+  // (2026-09-23): the value cell DOES carry an accessible name — it's exactly
+  // the rendered value ("$1,234.56"), not a stable identifier.
+  const balanceRowYaml =
+    '- row "Savings $1,234.56":\n' + '  - rowheader "Savings"\n' + '  - cell "$1,234.56"\n';
+
+  it("prefers a structural row-header locator over role+name for a value cell, even though it has an accessible name", () => {
+    const snapshot = snapshotFor(balanceRowYaml);
+    const row = snapshot.frames[0]!.nodes[0]!;
+    const cellRef = row.children.find((c) => c.role === "cell")!.ref;
+    const chain = resolveRef(snapshot, "main", cellRef);
+    expect(chain).toEqual([
+      expect.objectContaining({ kind: "structural", rowHeader: "Savings" }),
+    ]);
+    expect(chain[0]!.rationale).toContain("would not generalize to a different record");
+  });
+
+  it("resolves a rowheader node itself via role+name, not structural", () => {
+    const snapshot = snapshotFor(balanceRowYaml);
+    const row = snapshot.frames[0]!.nodes[0]!;
+    const rowHeaderRef = row.children.find((c) => c.role === "rowheader")!.ref;
+    const chain = resolveRef(snapshot, "main", rowHeaderRef);
+    expect(chain).toEqual([
+      expect.objectContaining({ kind: "role", role: "rowheader", name: "Savings" }),
+    ]);
+  });
+
+  it("prefers structural for a nameless cell with a row header sibling too", () => {
+    const snapshot = snapshotFor('- row "Checking":\n' + "  - rowheader \"Checking\"\n" + "  - cell\n");
+    const row = snapshot.frames[0]!.nodes[0]!;
+    const cellRef = row.children.find((c) => c.role === "cell")!.ref;
+    const chain = resolveRef(snapshot, "main", cellRef);
+    expect(chain).toEqual([expect.objectContaining({ kind: "structural", rowHeader: "Checking" })]);
+    expect(chain[0]!.rationale).toContain("has no accessible name of its own");
+  });
 });

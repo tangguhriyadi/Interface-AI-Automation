@@ -7,6 +7,7 @@ import type { Checkpoint } from "../schema/checkpoint.js";
 import type { LocatorChain, LocatorStrategy } from "../schema/locator.js";
 import type { Step } from "../schema/step.js";
 import type { TenantOverlay } from "../schema/tenantOverlay.js";
+import { isWithinAllowlist } from "./policy.js";
 import { redactForLog } from "./redact.js";
 
 /** Raw page content (headings, alert text) is treated as PII by default in diagnostics — it's never quoted verbatim, since headings can carry a member's name. */
@@ -128,21 +129,6 @@ function translateLocatorChain(chain: LocatorChain, overlay: TenantOverlay | und
     }
     return strategy;
   });
-}
-
-/**
- * `origin` defaults to the app profile's own `originPattern`, but a tenant
- * can legitimately run on a different origin (its own subdomain/port) —
- * when a tenant overlay is in play, its `baseUrl` is the authoritative
- * origin for *this* replay run, not the app profile's default. Route
- * prefixes stay app-level either way; only the origin is tenant-specific.
- */
-function isWithinAllowlist(allowlist: AppProfile["allowlist"], origin: string, url: string): boolean {
-  if (!url.startsWith(origin)) {
-    return false;
-  }
-  const pathname = new URL(url).pathname;
-  return allowlist.routePrefixes.some((prefix) => pathname.startsWith(prefix));
 }
 
 /**

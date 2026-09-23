@@ -127,7 +127,7 @@
           "kind": "structural",
           "description": "the value cell in the row whose row header is \"Name\"",
           "rowHeader": "Name",
-          "rationale": "The name value cell has no accessible name of its own (mirrors the balance panel's row-header pattern) — the row header is the only reliable, non-positional signal."
+          "rationale": "The name value cell's accessible name is the rendered value itself (e.g. \"Elena Cho\", verified live 2026-09-23) — a role+name locator built from it would only ever match this one member and break for any other memberId. The row header \"Name\" is the only signal stable across records."
         }
       ],
       "outputName": "memberName"
@@ -142,7 +142,7 @@
           "kind": "structural",
           "description": "the value cell in the row whose row header is \"Savings\"",
           "rowHeader": "Savings",
-          "rationale": "The balance value cell has no accessible name of its own (evidence/accessibility-snapshot-spike/balance-panel.aria.yaml) — the row header is the only reliable, non-positional signal."
+          "rationale": "The balance value cell's accessible name is the rendered value itself (e.g. \"$1,234.56\", verified live 2026-09-23 — evidence/accessibility-snapshot-spike/balance-panel.aria.yaml) — a role+name locator built from it would only ever match this one balance and break for any other memberId. The row header \"Savings\" is the only signal stable across records."
         }
       ],
       "outputName": "savingsBalance"
@@ -152,5 +152,6 @@
     "kind": "frame_present",
     "frame": { "by": "title", "value": "Account Balance" }
   },
-  "businessOutcomes": ["member_not_found", "access_denied", "invalid_input"]
+  "businessOutcomes": ["member_not_found", "access_denied", "invalid_input"],
+  "approvalState": "approved"
 }

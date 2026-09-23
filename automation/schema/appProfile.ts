@@ -70,6 +70,20 @@ export const AllowlistSchema = z.object({
 export type Allowlist = z.infer<typeof AllowlistSchema>;
 
 /**
+ * A control the discovery loop must never act on — app-wide, human-authored,
+ * same rationale as outcomes/recoveries/sessionExpiry: this is safety-critical
+ * knowledge about the app, and this project never asks the model to judge its
+ * own reversibility. Matched by role+name against the ref the model picks,
+ * before the discovery driver ever calls click/type/select on it.
+ */
+export const IrreversibleControlSchema = z.object({
+  role: z.string().min(1),
+  name: z.string().min(1),
+  exact: z.boolean().default(true),
+});
+export type IrreversibleControl = z.infer<typeof IrreversibleControlSchema>;
+
+/**
  * Business-outcome detectors and recovery rules are properties of the app,
  * not of one capability — authored and reviewed by a human, per appId.
  */
@@ -89,6 +103,14 @@ export const AppProfileSchema = z.object({
    * structurally (an unexplained state still surfaces as some other error).
    */
   sessionExpiry: z.array(DetectorShapeSchema).min(1).optional(),
+  /**
+   * Discovery's pre-action policy gate (executor/policy.ts) refuses to ever
+   * execute a click/type/select whose resolved role+name matches an entry
+   * here — see IrreversibleControlSchema. Defaults to empty: an app profile
+   * that hasn't been reviewed for irreversible controls yet declares none,
+   * rather than silently allowing discovery to guess.
+   */
+  irreversibleControls: z.array(IrreversibleControlSchema).default([]),
   allowlist: AllowlistSchema,
 });
 export type AppProfile = z.infer<typeof AppProfileSchema>;

@@ -53,6 +53,16 @@ const capabilityShape = {
   steps: z.array(StepSchema).min(1),
   successCheckpoint: CheckpointSchema,
   businessOutcomes: z.array(z.string().min(1)).default([]),
+  /**
+   * "Reviewable" as a real, checkable property, not just an asserted one.
+   * Discovery (see /automation/discovery/) always emits "draft" — a
+   * discovered artifact has not been looked at by a human yet, however
+   * clean its run was. Only a human flips this to "approved"; nothing in
+   * this codebase does so automatically, and nothing gates on it yet — that
+   * (e.g. refusing unattended replay of a draft artifact) is a deliberate
+   * later decision this field just leaves room for.
+   */
+  approvalState: z.enum(["draft", "approved"]).default("draft"),
 };
 
 export const CapabilityArtifactSchema = z.object(capabilityShape).superRefine((artifact, ctx) => {

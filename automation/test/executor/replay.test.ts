@@ -25,6 +25,7 @@ const baseCapability: CapabilityArtifact = {
   ],
   successCheckpoint: { kind: "heading_starts_with", text: "Detail" },
   businessOutcomes: ["not_found"],
+  approvalState: "approved",
 };
 
 const appProfile: AppProfile = {
@@ -43,6 +44,7 @@ const appProfile: AppProfile = {
   // Matches target-app's real, observed expired-session rendering: same heading as the
   // plain login page, distinguished only by a role=alert notice (evidence/app-profile-verification/session-expired.aria.yaml).
   sessionExpiry: [{ headingEquals: "Log In", roleAlertContains: "session expired" }],
+  irreversibleControls: [],
   allowlist: { originPattern: "http://localhost", routePrefixes: ["/login", "/detail"] },
 };
 

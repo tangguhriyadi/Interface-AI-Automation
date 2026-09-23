@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AppProfileSchema, DetectorShapeSchema } from "../../schema/appProfile.js";
+import { AppProfileSchema, DetectorShapeSchema, IrreversibleControlSchema } from "../../schema/appProfile.js";
 
 const validProfile = {
   schemaVersion: "1.0.0",
@@ -108,5 +108,49 @@ describe("AppProfileSchema", () => {
     if (result.success) {
       expect(result.data.recoveries).toEqual([]);
     }
+  });
+
+  it("defaults irreversibleControls to an empty array when omitted", () => {
+    const result = AppProfileSchema.safeParse(validProfile);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.irreversibleControls).toEqual([]);
+    }
+  });
+
+  it("accepts a profile declaring irreversible controls", () => {
+    const result = AppProfileSchema.safeParse({
+      ...validProfile,
+      irreversibleControls: [{ role: "button", name: "Submit Loan Application", exact: true }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.irreversibleControls).toEqual([
+        { role: "button", name: "Submit Loan Application", exact: true },
+      ]);
+    }
+  });
+
+  it("defaults an irreversible control's exact to true when omitted", () => {
+    const result = AppProfileSchema.safeParse({
+      ...validProfile,
+      irreversibleControls: [{ role: "button", name: "Submit Loan Application" }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.irreversibleControls[0]?.exact).toBe(true);
+    }
+  });
+});
+
+describe("IrreversibleControlSchema", () => {
+  it("rejects a control missing a role", () => {
+    const result = IrreversibleControlSchema.safeParse({ name: "Submit Loan Application" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a control missing a name", () => {
+    const result = IrreversibleControlSchema.safeParse({ role: "button" });
+    expect(result.success).toBe(false);
   });
 });

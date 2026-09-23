@@ -113,6 +113,27 @@ describe("CapabilityArtifactSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("defaults approvalState to draft when omitted", () => {
+    const result = CapabilityArtifactSchema.safeParse(validArtifact);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.approvalState).toBe("draft");
+    }
+  });
+
+  it("accepts an explicitly approved artifact", () => {
+    const result = CapabilityArtifactSchema.safeParse({ ...validArtifact, approvalState: "approved" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.approvalState).toBe("approved");
+    }
+  });
+
+  it("rejects an approvalState outside draft/approved", () => {
+    const result = CapabilityArtifactSchema.safeParse({ ...validArtifact, approvalState: "reviewed" });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("buildInputsSchema (decision 7: permissive by construction)", () => {
