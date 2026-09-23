@@ -47,5 +47,13 @@ export interface SurfaceAdapter {
    * executor's hard-failure signal.
    */
   lastNavigationStatus(): number | undefined;
+  /**
+   * Captures the current page as a PNG — evidence and escalation context
+   * only, never the basis for deciding an action (CLAUDE.md's Perception
+   * Model: screenshots are captured, not clicked on). Called by
+   * evidence-writing (automation/evidence.ts), not by replay/discover
+   * themselves.
+   */
+  screenshot(): Promise<Buffer>;
   close(): Promise<void>;
 }

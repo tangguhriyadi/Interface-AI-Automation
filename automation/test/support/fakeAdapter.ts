@@ -78,6 +78,13 @@ export class FakeAdapter implements SurfaceAdapter {
     throw new Error("FakeAdapter.snapshot() called with nothing queued and nothing served yet");
   }
 
+  screenshotCallCount = 0;
+
+  async screenshot(): Promise<Buffer> {
+    this.screenshotCallCount += 1;
+    return Buffer.from("fake-png-bytes");
+  }
+
   async close(): Promise<void> {}
 }
 

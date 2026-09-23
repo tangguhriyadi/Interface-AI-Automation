@@ -1,0 +1,7 @@
+{"stepId":"type-username","action":"type","outcome":"ok","durationMs":10,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"teller"}
+{"stepId":"type-password","action":"type","outcome":"ok","durationMs":23,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:secret]"}
+{"stepId":"click-log-in","action":"click","outcome":"ok","durationMs":54,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"type-member-id","action":"type","outcome":"ok","durationMs":4,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:pii]"}
+{"stepId":"click-search","action":"click","outcome":"ok","durationMs":44,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"read-member-name","action":"read","outcome":"skipped","durationMs":0,"recoveriesFired":[]}
+{"stepId":"read-savings-balance","action":"read","outcome":"skipped","durationMs":0,"recoveriesFired":[]}

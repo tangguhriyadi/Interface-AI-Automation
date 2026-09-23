@@ -1,0 +1,66 @@
+{
+  "runKind": "replay",
+  "capabilityId": "lookup_member_savings_balance",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "writtenAt": "2026-09-23T23:33:04.658Z",
+  "durationMs": 1809,
+  "status": "success",
+  "stepCount": 7,
+  "steps": [
+    {
+      "stepId": "type-username",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 11
+    },
+    {
+      "stepId": "type-password",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 23
+    },
+    {
+      "stepId": "click-log-in",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 51
+    },
+    {
+      "stepId": "type-member-id",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 4
+    },
+    {
+      "stepId": "click-search",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 55
+    },
+    {
+      "stepId": "read-member-name",
+      "action": "read",
+      "outcome": "ok",
+      "matchedStrategy": "structural",
+      "durationMs": 3
+    },
+    {
+      "stepId": "read-savings-balance",
+      "action": "read",
+      "outcome": "ok",
+      "matchedStrategy": "structural",
+      "durationMs": 3
+    }
+  ],
+  "recoveries": [],
+  "outputs": {
+    "memberName": "[REDACTED:pii]",
+    "savingsBalance": "[REDACTED:pii]"
+  }
+}

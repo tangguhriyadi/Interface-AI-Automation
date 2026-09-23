@@ -48,6 +48,20 @@ interface DiscoveryResultCommon {
   turns: DiscoveryTurnLogEntry[];
   /** Recoveries dismissed in-flight during this run — recorded so a reviewer can see they were detected, same as CLAUDE.md requires of replay. Never a step: an interstitial can appear anywhere, and dismissing one says nothing about how to complete the goal from a clean page. */
   recoveries: string[];
+  /** Total wall-clock time for the run, start to finish — for a human-readable evidence summary, not used by the loop itself. */
+  durationMs: number;
+  /**
+   * Every secret/pii-sensitivity value used this run (an input literal
+   * typed, or an output value read) that cleared `MIN_SCRUB_PATTERN_LENGTH`
+   * — exposed so a caller writing evidence (automation/evidence.ts) can
+   * scrub free-text fields the same way the checkpoint safety net already
+   * protects `done`. Concretely: the model's own `escalate` reason is free
+   * text and may quote page content, including something this list would
+   * catch. This module never writes these values anywhere itself — the
+   * caller is responsible for using them, same trust model as
+   * `ReplayResult.success.outputs` already exposing raw values.
+   */
+  knownSensitiveValues: readonly string[];
 }
 
 type DiscoveryResultShape =
@@ -198,7 +212,7 @@ interface KnownValue {
  * enough to still protect a real name ("Elena Cho", 9) or a real
  * credential, long enough to exclude common short status/enum words.
  */
-const MIN_SCRUB_PATTERN_LENGTH = 7;
+export const MIN_SCRUB_PATTERN_LENGTH = 7;
 
 function valuesOfSensitivity(known: KnownValue[], sensitivities: Sensitivity[]): string[] {
   return known
@@ -257,7 +271,13 @@ export async function discover(
   };
 
   function finalize(shape: DiscoveryResultShape): DiscoveryResult {
-    return { ...shape, turns: turnLog, recoveries: [...recoveriesSeen] } as DiscoveryResult;
+    return {
+      ...shape,
+      turns: turnLog,
+      recoveries: [...recoveriesSeen],
+      durationMs: Date.now() - startedAt,
+      knownSensitiveValues: valuesOfSensitivity(knownValues, ["secret", "pii"]),
+    } as DiscoveryResult;
   }
 
   function nextStepId(action: string): string {

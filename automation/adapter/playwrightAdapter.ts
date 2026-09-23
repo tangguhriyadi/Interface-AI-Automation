@@ -167,6 +167,10 @@ export class PlaywrightAdapter implements SurfaceAdapter {
     return { frames };
   }
 
+  async screenshot(): Promise<Buffer> {
+    return this.page.screenshot();
+  }
+
   async close(): Promise<void> {
     await this.browser.close();
   }

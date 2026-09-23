@@ -68,6 +68,8 @@ export interface StepRecord {
 interface ReplayResultCommon {
   steps: StepRecord[];
   recoveries: string[];
+  /** Total wall-clock time for the run, start to finish — for a human-readable evidence summary, not used by replay() itself. */
+  durationMs: number;
 }
 
 /** The status-specific fields only — `ReplayResultCommon` (steps/recoveries) is added separately by `finalize`. */
@@ -140,6 +142,7 @@ export async function replay(
   inputs: Record<string, string>,
   options: ReplayOptions = {},
 ): Promise<ReplayResult> {
+  const startedAt = Date.now();
   const parsedInputs = buildInputsSchema(capability.inputs).parse(inputs);
   const allowIrreversible = options.allowIrreversible ?? false;
   const allowlistOrigin = options.tenantOverlay?.baseUrl ?? appProfile.allowlist.originPattern;
@@ -280,7 +283,12 @@ export async function replay(
   }
 
   function finalize(outcome: ResultShape): ReplayResult {
-    return { ...outcome, steps: stepRecords, recoveries: [...recoveriesSeen] } as ReplayResult;
+    return {
+      ...outcome,
+      steps: stepRecords,
+      recoveries: [...recoveriesSeen],
+      durationMs: Date.now() - startedAt,
+    } as ReplayResult;
   }
 
   function markRemainingSkipped(fromIndex: number): void {

@@ -1,0 +1,61 @@
+{
+  "runKind": "replay",
+  "capabilityId": "lookup_member_savings_balance",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "writtenAt": "2026-09-23T23:33:06.496Z",
+  "durationMs": 1724,
+  "status": "business_outcome",
+  "stepCount": 7,
+  "steps": [
+    {
+      "stepId": "type-username",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 10
+    },
+    {
+      "stepId": "type-password",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 23
+    },
+    {
+      "stepId": "click-log-in",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 54
+    },
+    {
+      "stepId": "type-member-id",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 4
+    },
+    {
+      "stepId": "click-search",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 44
+    },
+    {
+      "stepId": "read-member-name",
+      "action": "read",
+      "outcome": "skipped",
+      "durationMs": 0
+    },
+    {
+      "stepId": "read-savings-balance",
+      "action": "read",
+      "outcome": "skipped",
+      "durationMs": 0
+    }
+  ],
+  "recoveries": [],
+  "outcome": "member_not_found"
+}
