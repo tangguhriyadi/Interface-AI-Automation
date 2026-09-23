@@ -12,6 +12,28 @@ describe("LocatorStrategySchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts a role+name strategy with an nth disambiguator", () => {
+    const result = LocatorStrategySchema.safeParse({
+      kind: "role",
+      role: "button",
+      name: "OK",
+      nth: 1,
+      rationale: "Resolved from a snapshot ref; ordinal 1 among two matches.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a negative nth", () => {
+    const result = LocatorStrategySchema.safeParse({
+      kind: "role",
+      role: "button",
+      name: "OK",
+      nth: -1,
+      rationale: "x",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("accepts a label strategy", () => {
     const result = LocatorStrategySchema.safeParse({
       kind: "label",

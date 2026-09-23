@@ -1,0 +1,17 @@
+# Captured via `page.frameLocator('iframe[title="Account Balance"]').locator("body").ariaSnapshot()`
+# against a live target-app instance (GET /members/10001/balance, iframe content), 2026-09-23.
+- table:
+  - rowgroup:
+    - row "Account Balance":
+      - cell "Account Balance":
+        - heading "Account Balance" [level=1]
+    - row "Savings $1,234.56 Checking $456.78":
+      - cell "Savings $1,234.56 Checking $456.78":
+        - table:
+          - rowgroup:
+            - row "Savings $1,234.56":
+              - rowheader "Savings"
+              - cell "$1,234.56"
+            - row "Checking $456.78":
+              - rowheader "Checking"
+              - cell "$456.78"

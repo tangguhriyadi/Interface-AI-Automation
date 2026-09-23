@@ -1,0 +1,26 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance (GET /members/10001, main frame), 2026-09-23. Note the bare
+# `- iframe` leaf with no accessible name: iframe content is never included
+# here, and its `title="Account Balance"` attribute does not surface as an
+# accessible name (see findings.md).
+- table:
+  - rowgroup:
+    - 'row "Member: Elena Cho"':
+      - 'cell "Member: Elena Cho"':
+        - 'heading "Member: Elena Cho" [level=1]'
+    - row "Name Elena Cho Member ID 10001 Status active Account Balance Open Sub-Account Log Out":
+      - cell "Name Elena Cho Member ID 10001 Status active Account Balance Open Sub-Account Log Out":
+        - table:
+          - rowgroup:
+            - row "Name Elena Cho":
+              - rowheader "Name"
+              - cell "Elena Cho"
+            - row "Member ID 10001":
+              - rowheader "Member ID"
+              - cell "10001"
+            - row "Status active":
+              - rowheader "Status"
+              - cell "active"
+        - iframe
+        - button "Open Sub-Account"
+        - button "Log Out"

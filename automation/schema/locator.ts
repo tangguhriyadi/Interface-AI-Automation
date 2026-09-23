@@ -11,6 +11,14 @@ export const RoleNameLocatorSchema = z.object({
   role: z.string().min(1),
   name: z.string().min(1),
   exact: z.boolean().default(true),
+  /**
+   * Disambiguates repeated role+name matches (0-indexed), the "nth" in
+   * CLAUDE.md's "resolve refs via role+name+nth within the frame." Omitted
+   * when the role+name pair is already unique — most hand-authored
+   * locators never need it; it exists for `resolveRef` (adapter phase),
+   * which fills it in only when the snapshot shows more than one match.
+   */
+  nth: z.number().int().nonnegative().optional(),
   rationale: z.string().min(1),
 });
 

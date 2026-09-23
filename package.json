@@ -1,0 +1,18 @@
+{
+  "name": "interface-ai-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command launcher only — delegates to /target-app and /automation, which are the two real npm projects. No code, no dependencies of its own.",
+  "scripts": {
+    "target-app:install": "npm --prefix target-app install",
+    "target-app:dev": "npm --prefix target-app run dev",
+    "target-app:build": "npm --prefix target-app run build",
+    "target-app:test": "npm --prefix target-app run test",
+    "automation:install": "npm --prefix automation install",
+    "automation:build": "npm --prefix automation run build",
+    "automation:test": "npm --prefix automation run test",
+    "automation:test:integration": "npm --prefix automation run test:integration",
+    "build": "npm run target-app:build && npm run automation:build",
+    "test": "npm run target-app:test && npm run automation:test"
+  }
+}
