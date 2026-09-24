@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SurfaceAdapter } from "./adapter/surfaceAdapter.js";
 import { MIN_SCRUB_PATTERN_LENGTH, type DiscoveryResult } from "./discovery/discover.js";
+import type { InterventionRecord } from "./escalation.js";
 import { redactForLog, scrubSecretValues } from "./executor/redact.js";
 import type { ReplayResult, StepRecord } from "./executor/replay.js";
 import type { CapabilityArtifact, Sensitivity } from "./schema/capability.js";
@@ -18,6 +19,16 @@ import type { CapabilityArtifact, Sensitivity } from "./schema/capability.js";
  * pure functions with no filesystem I/O of their own, callable and testable
  * without ever touching disk; this module is called explicitly, after a run
  * completes, by whatever drives it.
+ *
+ * Every screenshot this module writes — the run's own end-of-run one, and
+ * one per escalation handoff — carries a `.raw-page-content.png` suffix
+ * (`screenshotFileName`, below). It's the one deliberately unsolved PII
+ * channel in this system (CLAUDE.md's Perception Model accepts screenshots
+ * as escalation context; REPORT.md's Safety section says so explicitly):
+ * whatever was actually on screen, member names included, unlike every
+ * other file here, which is redacted before it ever touches disk. The
+ * suffix means a reviewer — or a script — can tell which files need that
+ * different handling without opening any of them.
  */
 
 /**
@@ -43,10 +54,30 @@ export interface WrittenEvidence {
   jsonlPath: string;
   summaryPath: string;
   screenshotPath?: string;
+  /** One entry per intervention this run went through, in the same order as `summary.json`'s `interventions` array — empty unless the run was given an `onEscalation` handler. */
+  interventionScreenshotPaths: string[];
 }
 
 function timestampSlug(date: Date): string {
   return date.toISOString().replace(/[:.]/g, "-");
+}
+
+/**
+ * Every screenshot this module writes carries this same suffix — a marker,
+ * not decoration. Unlike every other file evidence writes (JSONL, summary),
+ * a screenshot is *raw page content*: whatever was actually on screen,
+ * member names included, at the moment it was taken. CLAUDE.md's Perception
+ * Model already accepts this for escalation context; it's an intentionally
+ * unsolved PII channel (see REPORT.md's Safety section), not an oversight,
+ * and naming it in the filename itself is what makes it recognizable to
+ * anyone opening the folder later, without having to open the file to find
+ * out — a `.png` sitting next to redacted JSON gives no such warning on its
+ * own.
+ */
+const RAW_PAGE_CONTENT_SUFFIX = ".raw-page-content.png";
+
+function screenshotFileName(stem: string): string {
+  return `${stem}${RAW_PAGE_CONTENT_SUFFIX}`;
 }
 
 async function writeEvidenceFiles(
@@ -54,17 +85,23 @@ async function writeEvidenceFiles(
   jsonlLines: string[],
   summary: unknown,
   screenshot: Buffer | undefined,
+  interventionScreenshots: { stem: string; buffer: Buffer }[],
 ): Promise<WrittenEvidence> {
   await mkdir(dir, { recursive: true });
   const jsonlPath = join(dir, "steps.jsonl");
   const summaryPath = join(dir, "summary.json");
   await writeFile(jsonlPath, jsonlLines.map((line) => `${line}\n`).join(""), "utf-8");
   await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf-8");
-  const written: WrittenEvidence = { dir, jsonlPath, summaryPath };
+  const written: WrittenEvidence = { dir, jsonlPath, summaryPath, interventionScreenshotPaths: [] };
   if (screenshot) {
-    const screenshotPath = join(dir, "screenshot.png");
+    const screenshotPath = join(dir, screenshotFileName("screenshot"));
     await writeFile(screenshotPath, screenshot);
     written.screenshotPath = screenshotPath;
+  }
+  for (const { stem, buffer } of interventionScreenshots) {
+    const path = join(dir, screenshotFileName(stem));
+    await writeFile(path, buffer);
+    written.interventionScreenshotPaths.push(path);
   }
   return written;
 }
@@ -95,6 +132,41 @@ function redactedInputsSummary(
   return Object.fromEntries(
     entries.map(([name, { value, sensitivity }]) => [name, { sensitivity, value: redactForLog(value, sensitivity) }]),
   );
+}
+
+/**
+ * Shared by replay and discovery evidence alike — `InterventionRecord`'s shape
+ * (from escalation.ts) doesn't vary between them. Each entry's `screenshot`
+ * `Buffer` is pulled out and named (`screenshotFileName`) rather than ever
+ * being serialized into JSON — `InterventionRequest.screenshot`'s own doc
+ * comment is explicit about this: the JSON gets a path, the pixels get their
+ * own file. `reason`/`url` go through the same scrub every other free-text
+ * evidence field already does — a request's `reason` is composed by the
+ * driver and already redaction-safe by construction, but the value-based
+ * scrub is a second, independent layer applied uniformly, same as everywhere
+ * else in this module.
+ */
+function interventionSummaryEntries(
+  interventions: InterventionRecord[],
+  scrub: (text: string) => string,
+): { entries: Record<string, unknown>[]; screenshots: { stem: string; buffer: Buffer }[] } {
+  const entries: Record<string, unknown>[] = [];
+  const screenshots: { stem: string; buffer: Buffer }[] = [];
+  interventions.forEach((intervention, index) => {
+    const stem = `intervention-${index + 1}`;
+    screenshots.push({ stem, buffer: intervention.request.screenshot });
+    entries.push({
+      kind: intervention.request.kind,
+      location: intervention.request.location,
+      reason: scrub(intervention.request.reason),
+      url: intervention.request.url !== undefined ? scrub(intervention.request.url) : undefined,
+      decision: intervention.decision,
+      raisedAt: intervention.raisedAt,
+      resumedAt: intervention.resumedAt,
+      screenshotFile: screenshotFileName(stem),
+    });
+  });
+  return { entries, screenshots };
 }
 
 // ---------------------------------------------------------------------------
@@ -183,8 +255,15 @@ export async function writeReplayEvidence(
 
   const scrubValues = replayScrubValues(capability, inputs, result);
   const scrub = (text: string) => scrubSecretValues(text, scrubValues);
+  const { entries: interventionEntries, screenshots: interventionScreenshots } = interventionSummaryEntries(
+    result.interventions,
+    scrub,
+  );
 
-  const jsonlLines = result.steps.map((step) => JSON.stringify(scrubStep(step, scrub)));
+  const jsonlLines = [
+    ...result.steps.map((step) => JSON.stringify(scrubStep(step, scrub))),
+    ...interventionEntries.map((entry) => JSON.stringify({ record: "intervention", ...entry })),
+  ];
 
   const summary = {
     runKind: "replay" as const,
@@ -206,11 +285,12 @@ export async function writeReplayEvidence(
       durationMs: s.durationMs,
     })),
     recoveries: result.recoveries,
+    interventions: interventionEntries,
     ...replayStatusDetail(result, capability, scrub),
   };
 
   const screenshot = needsScreenshot(result.status) ? await adapter.screenshot() : undefined;
-  return writeEvidenceFiles(dir, jsonlLines, summary, screenshot);
+  return writeEvidenceFiles(dir, jsonlLines, summary, screenshot, interventionScreenshots);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,10 +341,15 @@ export async function writeDiscoveryEvidence(
   const dir = join(options.baseDir ?? REPO_ROOT_EVIDENCE_DIR, "discovery", timestampSlug(now));
 
   const scrub = (text: string) => scrubSecretValues(text, result.knownSensitiveValues);
-
-  const jsonlLines = result.turns.map((turn) =>
-    JSON.stringify({ toolName: turn.toolName, outcome: turn.outcome, detail: scrub(turn.detail) }),
+  const { entries: interventionEntries, screenshots: interventionScreenshots } = interventionSummaryEntries(
+    result.interventions,
+    scrub,
   );
+
+  const jsonlLines = [
+    ...result.turns.map((turn) => JSON.stringify({ toolName: turn.toolName, outcome: turn.outcome, detail: scrub(turn.detail) })),
+    ...interventionEntries.map((entry) => JSON.stringify({ record: "intervention", ...entry })),
+  ];
 
   const summary = {
     runKind: "discovery" as const,
@@ -276,9 +361,10 @@ export async function writeDiscoveryEvidence(
     inputs: redactedInputsSummary(Object.entries(goal.inputs)),
     turnCount: result.turns.length,
     recoveries: result.recoveries,
+    interventions: interventionEntries,
     ...discoveryStatusDetail(result, scrub),
   };
 
   const screenshot = needsScreenshot(result.status) ? await adapter.screenshot() : undefined;
-  return writeEvidenceFiles(dir, jsonlLines, summary, screenshot);
+  return writeEvidenceFiles(dir, jsonlLines, summary, screenshot, interventionScreenshots);
 }
