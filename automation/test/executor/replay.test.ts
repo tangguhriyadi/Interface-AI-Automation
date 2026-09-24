@@ -3,7 +3,26 @@ import type { AppProfile } from "../../schema/appProfile.js";
 import type { CapabilityArtifact } from "../../schema/capability.js";
 import type { LocatorStrategy } from "../../schema/locator.js";
 import { replay } from "../../executor/replay.js";
+import type { EscalationHandler, InterventionDecision, InterventionRequest } from "../../escalation.js";
 import { FakeAdapter, snapshotOf } from "../support/fakeAdapter.js";
+
+/**
+ * Scripts an EscalationHandler's decisions in order, repeating the last one once
+ * exhausted (mirrors FakeAdapter.snapshotQueue's own "repeat the last" convention).
+ * Records every request it was handed, in order, so tests can assert on what
+ * reached the operator — and in what shape — without the handler itself touching
+ * the adapter (the real proof that the adapter is gated during handoff lives in
+ * escalation.test.ts; here we're proving replay() sequences and wires it correctly).
+ */
+function fakeHandler(...decisions: InterventionDecision[]): { handler: EscalationHandler; requests: InterventionRequest[] } {
+  const requests: InterventionRequest[] = [];
+  const handler: EscalationHandler = async (request) => {
+    requests.push(request);
+    const decision = decisions[requests.length - 1] ?? decisions[decisions.length - 1]!;
+    return decision;
+  };
+  return { handler, requests };
+}
 
 function role(roleName: string, name: string): LocatorStrategy {
   return { kind: "role", role: roleName, name, exact: true, rationale: "test" };
@@ -542,5 +561,219 @@ describe("replay — input validation (decision 7: permissive by construction)",
     const adapter = new FakeAdapter();
     adapter.snapshotQueue = [loginSnapshot, detailSnapshot, detailSnapshot];
     await expect(replay(capabilityWithInput, appProfile, adapter, { memberId: "" })).resolves.toBeDefined();
+  });
+});
+
+describe("replay — escalation handoff (onEscalation)", () => {
+  // Same shape as "replay — irreversible steps" above: a safe leading step
+  // establishes "we've left entryPoint" before the irreversible step, matching a
+  // real artifact's shape.
+  const irreversibleCapability: CapabilityArtifact = {
+    ...baseCapability,
+    steps: [
+      baseCapability.steps[0]!, // click-go (safe) — leaves entryPoint
+      {
+        id: "open-account",
+        action: "click",
+        classification: "irreversible",
+        continuesAfterSkip: false,
+        target: [role("button", "Open Account")],
+      },
+      baseCapability.steps[1]!, // read-value (last)
+    ],
+  };
+
+  it("does not change behavior when onEscalation is unset — the full existing suite above already proves this, this just names it", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot];
+    const result = await replay(irreversibleCapability, appProfile, adapter, {});
+    expect(result.status).toBe("escalated");
+    expect(result.interventions).toEqual([]);
+  });
+
+  it("performed at the pre-execution escalation point: a clean re-check resumes and the run completes", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot, detailSnapshot];
+    const { handler, requests } = fakeHandler({ signal: "performed" });
+
+    const result = await replay(irreversibleCapability, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("success");
+    expect(adapter.clickLog).toHaveLength(1); // only click-go — automation itself never sent open-account's click
+    expect(adapter.screenshotCallCount).toBe(1);
+    expect(result.interventions).toHaveLength(1);
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "performed" } });
+    expect(result.steps[1]).toMatchObject({
+      stepId: "open-account",
+      outcome: "ok",
+      handledByOperator: true,
+      operatorSignal: "performed",
+      irreversibleExecutionAuthorized: true,
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      kind: "irreversible_action",
+      runKind: "replay",
+      subject: "test_capability",
+      location: "open-account",
+      url: "http://localhost/detail",
+    });
+    expect(requests[0]!.reason).toContain("open-account");
+    expect(requests[0]!.screenshot).toBeInstanceOf(Buffer);
+    expect(requests[0]!.screenshot.length).toBeGreaterThan(0);
+  });
+
+  it("performed after an ambiguous post-execution result: automation's own attempt escalates, then a clean re-check resumes", async () => {
+    const adapter = new FakeAdapter();
+    // entry -> click-go: detail (left entryPoint) -> open-account's own post-click check:
+    // expired session (ambiguous — escalates) -> handoff's before-cede capture: still
+    // expired -> handoff's performed re-check: clean again -> read-value: clean.
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot, expiredLoginSnapshot, expiredLoginSnapshot, detailSnapshot];
+    const { handler, requests } = fakeHandler({ signal: "performed" });
+
+    const result = await replay(irreversibleCapability, appProfile, adapter, {}, { allowIrreversible: true, onEscalation: handler });
+
+    expect(result.status).toBe("success");
+    expect(adapter.clickLog).toHaveLength(2); // click-go, then open-account — sent exactly once, never retried
+    expect(result.interventions).toHaveLength(1);
+    expect(result.steps[1]).toMatchObject({
+      stepId: "open-account",
+      outcome: "ok",
+      handledByOperator: true,
+      operatorSignal: "performed",
+      irreversibleExecutionAuthorized: true,
+    });
+    expect(requests[0]!.reason.toLowerCase()).toContain("may already have taken place");
+  });
+
+  it("performed with a persistently failing re-check re-escalates, bounded, then ends the run rather than looping forever", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot, expiredLoginSnapshot];
+    const { handler, requests } = fakeHandler({ signal: "performed" });
+
+    const result = await replay(irreversibleCapability, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason).toContain("did not resolve");
+      expect(result.reason).toContain("3");
+    }
+    expect(requests).toHaveLength(3); // MAX_INTERVENTION_CYCLES — asked exactly this many times, not forever
+    expect(result.interventions).toHaveLength(3);
+    expect(adapter.clickLog).toHaveLength(1); // open-account's action itself is never sent by automation in this path
+  });
+
+  it("skipped on the last step continues — the overall successCheckpoint is still honestly checked, not assumed", async () => {
+    const lastStepIrreversible: CapabilityArtifact = {
+      ...baseCapability,
+      steps: [
+        baseCapability.steps[0]!, // click-go — lands on the Detail page, already satisfying successCheckpoint
+        {
+          id: "open-account",
+          action: "click",
+          classification: "irreversible",
+          continuesAfterSkip: false, // deliberately false — being the last step should be enough on its own
+          target: [role("button", "Open Account")],
+        },
+      ],
+    };
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot, detailSnapshot];
+    const { handler } = fakeHandler({ signal: "skipped" });
+
+    const result = await replay(lastStepIrreversible, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("success");
+    expect(adapter.clickLog).toHaveLength(1); // open-account's click was never sent
+    expect(result.steps[1]).toMatchObject({
+      stepId: "open-account",
+      outcome: "ok",
+      handledByOperator: true,
+      operatorSignal: "skipped",
+      irreversibleExecutionAuthorized: false,
+    });
+  });
+
+  it("skipped on a non-last step without continuesAfterSkip ends the run stating why", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot];
+    const { handler } = fakeHandler({ signal: "skipped" });
+
+    const result = await replay(irreversibleCapability, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason).toContain("continuesAfterSkip");
+      expect(result.reason).toContain("open-account");
+    }
+    expect(result.interventions).toHaveLength(1);
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "skipped" } });
+    expect(result.steps[1]).toMatchObject({ stepId: "open-account", outcome: "skipped", irreversibleExecutionAuthorized: false });
+    expect(adapter.clickLog).toHaveLength(1);
+  });
+
+  it("skipped with continuesAfterSkip: true continues past a non-last step to the remaining steps", async () => {
+    const skippableCapability: CapabilityArtifact = {
+      ...baseCapability,
+      steps: [
+        baseCapability.steps[0]!,
+        {
+          id: "open-account",
+          action: "click",
+          classification: "irreversible",
+          continuesAfterSkip: true,
+          target: [role("button", "Open Account")],
+        },
+        baseCapability.steps[1]!,
+      ],
+    };
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot, detailSnapshot, detailSnapshot];
+    const { handler } = fakeHandler({ signal: "skipped" });
+
+    const result = await replay(skippableCapability, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("success");
+    expect(adapter.clickLog).toHaveLength(1); // open-account never actually clicked
+    expect(result.steps[1]).toMatchObject({
+      stepId: "open-account",
+      outcome: "ok",
+      handledByOperator: true,
+      operatorSignal: "skipped",
+      irreversibleExecutionAuthorized: false,
+    });
+    expect(result.steps[2]).toMatchObject({ stepId: "read-value", outcome: "ok" });
+  });
+
+  it("aborted ends the run", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot];
+    const { handler } = fakeHandler({ signal: "aborted" });
+
+    const result = await replay(irreversibleCapability, appProfile, adapter, {}, { onEscalation: handler });
+
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason.toLowerCase()).toContain("aborted");
+    }
+    expect(result.interventions).toHaveLength(1);
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "aborted" } });
+    expect(result.steps[1]).toMatchObject({ stepId: "open-account", outcome: "skipped", irreversibleExecutionAuthorized: false });
+  });
+
+  it("a handler that throws surfaces as a replay() rejection rather than hanging or swallowing the error", async () => {
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [loginSnapshot, detailSnapshot];
+    const throwingHandler: EscalationHandler = async () => {
+      throw new Error("operator console crashed");
+    };
+
+    // escalation.test.ts already proves control returns to "automation" in isolation
+    // (createControlGate's withOperatorControl finally); this proves that guarantee is
+    // actually wired through replay() — the failure propagates cleanly, not silently.
+    await expect(replay(irreversibleCapability, appProfile, adapter, {}, { onEscalation: throwingHandler })).rejects.toThrow(
+      "operator console crashed",
+    );
   });
 });

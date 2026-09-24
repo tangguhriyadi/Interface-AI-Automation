@@ -103,19 +103,38 @@ export interface ControlGatedAdapter extends SurfaceAdapter {
 
 export interface ControlGate {
   adapter: ControlGatedAdapter;
+  /** Exported for tests that need to drive ownership directly; executors should use `withOperatorControl` instead — see its own doc comment for why. */
   cedeControl(): void;
   returnControl(): void;
+  /**
+   * The safe entry point: cedes control, awaits the handler, and returns
+   * control in a `finally` — so a handler that throws (or an operator who
+   * aborts) can never leave ownership stuck on `"operator"` with every
+   * later adapter call failing forever. Callers (replay/discover) use this,
+   * not the two primitives directly, precisely so the cede/return pairing
+   * can't be forgotten on an error path.
+   */
+  withOperatorControl(handler: EscalationHandler, request: InterventionRequest): Promise<InterventionDecision>;
 }
 
 /**
- * Wraps a `SurfaceAdapter` so every single method — including read-only
- * ones like `snapshot`/`screenshot`/`lastNavigationStatus` — refuses to run
- * while control is ceded to an operator. This is an *enforced* invariant,
- * not a consequence of nothing happening to call the adapter during a
- * suspended `await`: a future bug (a badly-behaved handler, a missed
- * `returnControl()`) would otherwise fail silently instead of loudly. Every
- * method is gated, not just the acting ones — even an observation could
- * reflect a mid-action, inconsistent page state while a human is working.
+ * Wraps a `SurfaceAdapter` so every page-operation method — including
+ * read-only ones like `snapshot`/`screenshot`/`lastNavigationStatus` —
+ * refuses to run while control is ceded to an operator. This is an
+ * *enforced* invariant, not a consequence of nothing happening to call the
+ * adapter during a suspended `await`: a future bug (a badly-behaved
+ * handler, a missed `returnControl()`) would otherwise fail silently
+ * instead of loudly. Every page-facing method is gated, not just the
+ * acting ones — even an observation could reflect a mid-action,
+ * inconsistent page state while a human is working.
+ *
+ * `close()` is deliberately **not** gated: it's teardown, not a page
+ * operation, and the cleanup path that calls it — an operator aborting, a
+ * handler throwing, any `finally` block whose whole job is to release the
+ * browser — must always be able to run regardless of who currently holds
+ * control. Gating it would mean the one call meant to always succeed could
+ * itself throw `ControlOwnershipError` at exactly the moment nothing else
+ * can go wrong.
  */
 export function createControlGate(adapter: SurfaceAdapter): ControlGate {
   let owner: ControlOwner = "automation";
@@ -124,6 +143,14 @@ export function createControlGate(adapter: SurfaceAdapter): ControlGate {
     if (owner !== "automation") {
       throw new ControlOwnershipError(operation);
     }
+  }
+
+  function cedeControl(): void {
+    owner = "operator";
+  }
+
+  function returnControl(): void {
+    owner = "automation";
   }
 
   const gated: ControlGatedAdapter = {
@@ -159,8 +186,8 @@ export function createControlGate(adapter: SurfaceAdapter): ControlGate {
       assertAutomationOwns("screenshot");
       return adapter.screenshot();
     },
+    // Not gated — see the function-level doc comment above.
     async close(): Promise<void> {
-      assertAutomationOwns("close");
       return adapter.close();
     },
     currentOwner(): ControlOwner {
@@ -170,11 +197,15 @@ export function createControlGate(adapter: SurfaceAdapter): ControlGate {
 
   return {
     adapter: gated,
-    cedeControl: () => {
-      owner = "operator";
-    },
-    returnControl: () => {
-      owner = "automation";
+    cedeControl,
+    returnControl,
+    async withOperatorControl(handler: EscalationHandler, request: InterventionRequest): Promise<InterventionDecision> {
+      cedeControl();
+      try {
+        return await handler(request);
+      } finally {
+        returnControl();
+      }
     },
   };
 }

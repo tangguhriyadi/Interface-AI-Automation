@@ -86,6 +86,7 @@ describe("writeReplayEvidence", () => {
       ],
       recoveries: [],
       durationMs: 1234,
+      interventions: [],
     };
 
     const adapter = new FakeAdapter();
@@ -141,6 +142,7 @@ describe("writeReplayEvidence", () => {
       steps: [],
       recoveries: [],
       durationMs: 50,
+      interventions: [],
     };
 
     const adapter = new FakeAdapter();
@@ -158,6 +160,7 @@ describe("writeReplayEvidence", () => {
       steps: [],
       recoveries: [],
       durationMs: 5,
+      interventions: [],
     };
     const adapter = new FakeAdapter();
     const written = await writeReplayEvidence(capability, inputs, result, adapter, { baseDir });
@@ -167,7 +170,14 @@ describe("writeReplayEvidence", () => {
   });
 
   it("does not capture a screenshot for business_outcome — a recognized answer, not a problem", async () => {
-    const result: ReplayResult = { status: "business_outcome", outcome: "member_not_found", steps: [], recoveries: [], durationMs: 5 };
+    const result: ReplayResult = {
+      status: "business_outcome",
+      outcome: "member_not_found",
+      steps: [],
+      recoveries: [],
+      durationMs: 5,
+      interventions: [],
+    };
     const adapter = new FakeAdapter();
     const written = await writeReplayEvidence(capability, inputs, result, adapter, { baseDir });
 
@@ -261,7 +271,14 @@ describe("the default evidence directory is resolved relative to the repo root, 
     let written;
     process.chdir(elsewhere);
     try {
-      const result: ReplayResult = { status: "business_outcome", outcome: "not_found", steps: [], recoveries: [], durationMs: 1 };
+      const result: ReplayResult = {
+        status: "business_outcome",
+        outcome: "not_found",
+        steps: [],
+        recoveries: [],
+        durationMs: 1,
+        interventions: [],
+      };
       written = await writeReplayEvidence(capability, inputs, result, new FakeAdapter(), {
         now: () => new Date("2026-03-03T00:00:00.000Z"),
       }); // deliberately no baseDir override — this is the default under test

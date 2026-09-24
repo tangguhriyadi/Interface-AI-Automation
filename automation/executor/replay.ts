@@ -1,6 +1,14 @@
 import { evaluateCheckpoint, headingText } from "../adapter/matchers.js";
 import { LocatorResolutionError, type SurfaceAdapter } from "../adapter/surfaceAdapter.js";
 import type { Snapshot } from "../adapter/snapshotParser.js";
+import {
+  createControlGate,
+  isValidDecisionFor,
+  type EscalationHandler,
+  type InterventionKind,
+  type InterventionRecord,
+  type InterventionRequest,
+} from "../escalation.js";
 import type { AppProfile } from "../schema/appProfile.js";
 import { buildInputsSchema, type CapabilityArtifact } from "../schema/capability.js";
 import type { Checkpoint } from "../schema/checkpoint.js";
@@ -63,6 +71,10 @@ export interface StepRecord {
   observedValue?: string;
   /** Only present for steps classified irreversible. */
   irreversibleExecutionAuthorized?: boolean;
+  /** True when an operator, not automation, is responsible for this step's completion (or explicit non-completion) — set only via the escalation handoff. */
+  handledByOperator?: boolean;
+  /** Only present when handledByOperator is true — the closed-set signal the operator gave, never free text, so evidence says who did what. */
+  operatorSignal?: "performed" | "skipped";
 }
 
 interface ReplayResultCommon {
@@ -70,6 +82,8 @@ interface ReplayResultCommon {
   recoveries: string[];
   /** Total wall-clock time for the run, start to finish — for a human-readable evidence summary, not used by replay() itself. */
   durationMs: number;
+  /** Every escalation handoff cycle this run went through, in order — raised whether or not it ultimately resumed, so evidence shows exactly when control was ceded and returned. Empty unless `onEscalation` was configured. */
+  interventions: InterventionRecord[];
 }
 
 /** The status-specific fields only — `ReplayResultCommon` (steps/recoveries) is added separately by `finalize`. */
@@ -96,9 +110,21 @@ export interface ReplayOptions {
   /** Default false. Discovery never sets this — only replay, and only when the caller has actually authorised it. */
   allowIrreversible?: boolean;
   recoveryLimits?: { perRule?: number; overall?: number };
+  /**
+   * When set, an escalation pauses instead of ending the run: the same
+   * live `SurfaceAdapter` session stays open, control is ceded to this
+   * handler (see `escalation.ts`'s own doc comment for the production-scale
+   * seam this implies), and the operator's closed-set decision determines
+   * how — or whether — the run continues. Unset (the default) preserves
+   * today's exact behavior: an escalation ends the run immediately.
+   */
+  onEscalation?: EscalationHandler;
 }
 
 type TerminalOutcome = Exclude<ResultShape, { status: "success" }>;
+
+/** Bounded the same way the recovery loop is (executor/appDetection.ts) — a genuinely broken situation must eventually stop asking, not loop forever. */
+const MAX_INTERVENTION_CYCLES = 3;
 
 /**
  * Translates a locator chain's control names through the tenant overlay
@@ -146,10 +172,15 @@ export async function replay(
   const parsedInputs = buildInputsSchema(capability.inputs).parse(inputs);
   const allowIrreversible = options.allowIrreversible ?? false;
   const allowlistOrigin = options.tenantOverlay?.baseUrl ?? appProfile.allowlist.originPattern;
-  const appDetector = createAppDetector(appProfile, adapter, options.recoveryLimits);
+  // Every adapter operation this function performs — including the recovery loop's own
+  // dismiss clicks inside createAppDetector — goes through the gate, so control ownership
+  // is enforced everywhere, not just at the call sites this function writes directly.
+  const gate = createControlGate(adapter);
+  const appDetector = createAppDetector(appProfile, gate.adapter, options.recoveryLimits);
 
   const stepRecords: StepRecord[] = [];
   const recoveriesSeen = new Set<string>();
+  const interventions: InterventionRecord[] = [];
   const outputs: Record<string, string> = {};
   // False-positive guard for session-expiry detection (below): only treat the app
   // profile's sessionExpiry shape as meaningful once we've actually left entryPoint at
@@ -173,8 +204,18 @@ export async function replay(
   async function checkTransition(params: {
     step?: Step;
     checkCheckpoint: boolean;
+    /**
+     * Defaults to true. Set false after an escalation-handoff `skipped`
+     * signal: the operator declared the step's action never happened, so
+     * checking the step's *own* checkpoint (which asserts that action's
+     * effect) would only ever fail — not a meaningful signal, just a
+     * restatement that nothing happened. General safety checks (hard
+     * failure, allowlist, session-expiry, business outcome, recovery) and
+     * the capability's overall `successCheckpoint` still run regardless.
+     */
+    checkStepCheckpoint?: boolean;
   }): Promise<{ terminal?: TerminalOutcome; recoveriesFired: string[] }> {
-    const status = adapter.lastNavigationStatus();
+    const status = gate.adapter.lastNavigationStatus();
     if (status !== undefined && status >= 500) {
       return {
         terminal: classify(params.step, {
@@ -187,7 +228,7 @@ export async function replay(
       };
     }
 
-    const rawSnapshot = await adapter.snapshot();
+    const rawSnapshot = await gate.adapter.snapshot();
     const mainFrame = rawSnapshot.frames.find((f) => f.frameId === "main");
 
     if (mainFrame && !isWithinAllowlist(appProfile.allowlist, allowlistOrigin, mainFrame.url)) {
@@ -255,7 +296,7 @@ export async function replay(
     // runs on the last step. Without this, a mid-flow step that lands on the wrong
     // page would go undetected as long as the *final* page happened to still satisfy
     // the overall checkpoint.
-    if (params.step?.checkpoint && !evaluateCheckpoint(params.step.checkpoint, snapshot)) {
+    if ((params.checkStepCheckpoint ?? true) && params.step?.checkpoint && !evaluateCheckpoint(params.step.checkpoint, snapshot)) {
       return {
         terminal: classify(params.step, {
           stepId: params.step.id,
@@ -282,12 +323,144 @@ export async function replay(
     return { recoveriesFired: detection.recoveriesFired };
   }
 
+  /**
+   * Shared by both escalation points below. Every `escalated` result in
+   * `replay()` follows from a step classified `irreversible` (see `classify`
+   * above — it's the only path that produces `status: "escalated"`), so the
+   * intervention is always `kind: "irreversible_action"` here; the `"other"`
+   * kind belongs to discovery's non-action escalations instead.
+   *
+   * Captures URL/screenshot *before* ceding control (the gated adapter
+   * refuses `screenshot()`/`snapshot()` once ceded), hands the request to
+   * `options.onEscalation` through `gate.withOperatorControl` (so control
+   * can't get stuck on "operator" even if the handler throws), then acts on
+   * the closed-set decision:
+   *
+   * - `aborted` → the run ends now.
+   * - an otherwise-invalid signal for this kind → treated as an abort rather
+   *   than guessed at.
+   * - `performed` → re-runs `checkTransition` for the *same* step, exactly
+   *   as automation would after its own action — never trusted on the
+   *   operator's word alone. A clean re-check resumes; a re-escalation loops
+   *   (bounded by `MAX_INTERVENTION_CYCLES`) with the fresh expected-vs-observed
+   *   reason; any other terminal (hard failure, business outcome, …) ends
+   *   the run with that terminal directly.
+   * - `skipped` → only continues past a non-last step when it declares
+   *   `continuesAfterSkip` (the last step is always safe to skip, per
+   *   `continuesAfterSkip`'s own doc comment). Either way, general safety
+   *   conditions — and, on the last step, the overall `successCheckpoint` —
+   *   still get checked (`checkStepCheckpoint: false` suppresses only the
+   *   skipped step's *own* checkpoint, which could only ever fail once its
+   *   action is declared not to have happened).
+   */
+  async function attemptHandoff(params: {
+    terminal: Extract<TerminalOutcome, { status: "escalated" }>;
+    step: Step;
+    isLastStep: boolean;
+  }): Promise<
+    | { outcome: "resumed"; signal: "performed" | "skipped"; check: { recoveriesFired: string[] } }
+    | { outcome: "terminal"; terminal: TerminalOutcome }
+  > {
+    const handler = options.onEscalation;
+    if (!handler) {
+      return { outcome: "terminal", terminal: params.terminal };
+    }
+
+    const kind: InterventionKind = "irreversible_action";
+    let terminal = params.terminal;
+
+    for (let cycle = 0; cycle < MAX_INTERVENTION_CYCLES; cycle++) {
+      const raisedAt = new Date().toISOString();
+      // Captured before ceding control — the gated adapter refuses these once ceded.
+      const snapshot = await gate.adapter.snapshot();
+      const mainFrame = snapshot.frames.find((f) => f.frameId === "main");
+      const screenshot = await gate.adapter.screenshot();
+
+      const request: InterventionRequest = {
+        kind,
+        runKind: "replay",
+        subject: capability.capabilityId,
+        location: params.step.id,
+        reason: terminal.reason,
+        url: mainFrame?.url,
+        screenshot,
+      };
+
+      const decision = await gate.withOperatorControl(handler, request);
+      const resumedAt = new Date().toISOString();
+      interventions.push({ request, decision, raisedAt, resumedAt });
+
+      if (!isValidDecisionFor(kind, decision.signal)) {
+        return {
+          outcome: "terminal",
+          terminal: {
+            status: "escalated",
+            reason: `${terminal.reason} Operator gave signal "${decision.signal}", which is not valid for an irreversible-action escalation; ending the run rather than guessing intent.`,
+          },
+        };
+      }
+
+      if (decision.signal === "aborted") {
+        return {
+          outcome: "terminal",
+          terminal: { status: "escalated", reason: `${terminal.reason} Operator aborted the run during handoff.` },
+        };
+      }
+
+      if (decision.signal === "skipped") {
+        if (!params.isLastStep && !params.step.continuesAfterSkip) {
+          return {
+            outcome: "terminal",
+            terminal: {
+              status: "escalated",
+              reason: `${terminal.reason} Operator skipped step "${params.step.id}", but it does not declare continuesAfterSkip and this is not the last step — later steps may depend on its effect, so the run ends here rather than risk continuing on an unmet dependency.`,
+            },
+          };
+        }
+        // The skipped step's own checkpoint is deliberately not checked — the operator
+        // just declared its action never happened, so it could only ever fail. General
+        // safety conditions, and (on the last step) the capability's overall
+        // successCheckpoint, still run: "safe to skip" isn't the same as "the goal was
+        // reached without it."
+        const check = await checkTransition({ step: params.step, checkCheckpoint: params.isLastStep, checkStepCheckpoint: false });
+        if (check.terminal) {
+          return { outcome: "terminal", terminal: check.terminal };
+        }
+        check.recoveriesFired.forEach((r) => recoveriesSeen.add(r));
+        return { outcome: "resumed", signal: "skipped", check };
+      }
+
+      // performed — never trust, always verify: re-run the exact same check automation
+      // would run after its own action, against the same step.
+      const check = await checkTransition({ step: params.step, checkCheckpoint: params.isLastStep });
+      if (!check.terminal) {
+        check.recoveriesFired.forEach((r) => recoveriesSeen.add(r));
+        return { outcome: "resumed", signal: "performed", check };
+      }
+      if (check.terminal.status !== "escalated") {
+        return { outcome: "terminal", terminal: check.terminal };
+      }
+      // Still escalated after "performed" — loop again with the fresh expected-vs-observed
+      // reason, bounded rather than asking forever.
+      terminal = check.terminal;
+    }
+
+    return {
+      outcome: "terminal",
+      terminal: {
+        status: "escalated",
+        reason: `Escalation handoff for step "${params.step.id}" did not resolve after ${MAX_INTERVENTION_CYCLES} attempts; ending the run rather than looping indefinitely.`,
+      },
+    };
+  }
+
   function finalize(outcome: ResultShape): ReplayResult {
     return {
       ...outcome,
       steps: stepRecords,
       recoveries: [...recoveriesSeen],
       durationMs: Date.now() - startedAt,
+      interventions: [...interventions],
     } as ReplayResult;
   }
 
@@ -306,7 +479,7 @@ export async function replay(
   }
 
   // --- entry navigation ---
-  await adapter.goto(capability.entryPoint);
+  await gate.adapter.goto(capability.entryPoint);
   const entryCheck = await checkTransition({ checkCheckpoint: false });
   entryCheck.recoveriesFired.forEach((r) => recoveriesSeen.add(r));
   if (entryCheck.terminal) {
@@ -319,19 +492,34 @@ export async function replay(
     const isLastStep = i === capability.steps.length - 1;
 
     if (step.classification === "irreversible" && !allowIrreversible) {
+      const terminal: TerminalOutcome = {
+        status: "escalated",
+        reason: `Step "${step.id}" is classified irreversible and allowIrreversible was not set on this replay call; stopping before it is attempted.`,
+      };
+      const handoff = await attemptHandoff({ terminal, step, isLastStep });
+      if (handoff.outcome === "terminal") {
+        stepRecords.push({
+          stepId: step.id,
+          action: step.action,
+          outcome: "skipped",
+          durationMs: 0,
+          recoveriesFired: [],
+          irreversibleExecutionAuthorized: false,
+        });
+        markRemainingSkipped(i + 1);
+        return finalize(handoff.terminal);
+      }
       stepRecords.push({
         stepId: step.id,
         action: step.action,
-        outcome: "skipped",
+        outcome: "ok",
         durationMs: 0,
-        recoveriesFired: [],
-        irreversibleExecutionAuthorized: false,
+        recoveriesFired: handoff.check.recoveriesFired,
+        irreversibleExecutionAuthorized: handoff.signal === "performed",
+        handledByOperator: true,
+        operatorSignal: handoff.signal,
       });
-      markRemainingSkipped(i + 1);
-      return finalize({
-        status: "escalated",
-        reason: `Step "${step.id}" is classified irreversible and allowIrreversible was not set on this replay call; stopping before it is attempted.`,
-      });
+      continue;
     }
 
     const target = translateLocatorChain(step.target, options.tenantOverlay);
@@ -345,7 +533,7 @@ export async function replay(
     try {
       switch (step.action) {
         case "click": {
-          const result = await adapter.click(target, step.frame);
+          const result = await gate.adapter.click(target, step.frame);
           matchedStrategy = result.matchedStrategy.kind;
           break;
         }
@@ -353,7 +541,7 @@ export async function replay(
           const rawValue = parsedInputs[step.value.fromInput]!;
           const sensitivity = capability.inputs[step.value.fromInput]!.sensitivity;
           attemptedValue = redactForLog(rawValue, sensitivity);
-          const result = await adapter.type(target, rawValue, step.frame);
+          const result = await gate.adapter.type(target, rawValue, step.frame);
           matchedStrategy = result.matchedStrategy.kind;
           break;
         }
@@ -361,12 +549,12 @@ export async function replay(
           const rawValue = parsedInputs[step.value.fromInput]!;
           const sensitivity = capability.inputs[step.value.fromInput]!.sensitivity;
           attemptedValue = redactForLog(rawValue, sensitivity);
-          const result = await adapter.select(target, rawValue, step.frame);
+          const result = await gate.adapter.select(target, rawValue, step.frame);
           matchedStrategy = result.matchedStrategy.kind;
           break;
         }
         case "read": {
-          const result = await adapter.read(target, step.frame);
+          const result = await gate.adapter.read(target, step.frame);
           matchedStrategy = result.matchedStrategy.kind;
           outputs[step.outputName] = result.value;
           observedValue = redactForLog(result.value, capability.outputs[step.outputName]!.sensitivity);
@@ -397,6 +585,22 @@ export async function replay(
     };
 
     if (check.terminal) {
+      if (check.terminal.status === "escalated") {
+        const handoff = await attemptHandoff({ terminal: check.terminal, step, isLastStep });
+        if (handoff.outcome === "terminal") {
+          stepRecords.push({ ...baseRecord, outcome: "failed" });
+          markRemainingSkipped(i + 1);
+          return finalize(handoff.terminal);
+        }
+        stepRecords.push({
+          ...baseRecord,
+          outcome: "ok",
+          recoveriesFired: handoff.check.recoveriesFired,
+          handledByOperator: true,
+          operatorSignal: handoff.signal,
+        });
+        continue;
+      }
       // A clean business_outcome means the step's own action succeeded — the resulting
       // page just turned out to be a legitimate answer, not a problem with this step.
       // Every other terminal reason (hard failure, session-expiry, exhausted recovery,
