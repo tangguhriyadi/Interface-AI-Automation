@@ -76,7 +76,8 @@ function timestampSlug(date: Date): string {
  */
 const RAW_PAGE_CONTENT_SUFFIX = ".raw-page-content.png";
 
-function screenshotFileName(stem: string): string {
+/** Exported so `consoleEscalationHandler.ts` can name its own live-viewing screenshot the same way — one convention, not two that could drift. */
+export function screenshotFileName(stem: string): string {
   return `${stem}${RAW_PAGE_CONTENT_SUFFIX}`;
 }
 

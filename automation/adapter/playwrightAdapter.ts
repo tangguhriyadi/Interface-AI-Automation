@@ -99,8 +99,16 @@ export class PlaywrightAdapter implements SurfaceAdapter {
     });
   }
 
-  static async launch(baseUrl: string): Promise<PlaywrightAdapter> {
-    const browser = await chromium.launch();
+  /**
+   * `headless` defaults to `true`, preserving every existing caller
+   * (tests, the integration suite) unchanged. The CLI's own `discover`/
+   * `replay` commands pass `headless: false` — the escalation handoff's
+   * whole premise is a human acting in *the same visible window*
+   * automation was just driving, not a fresh one, so a demo run needs a
+   * real, on-screen browser to hand control to.
+   */
+  static async launch(baseUrl: string, options: { headless?: boolean } = {}): Promise<PlaywrightAdapter> {
+    const browser = await chromium.launch({ headless: options.headless ?? true });
     const page = await browser.newPage();
     return new PlaywrightAdapter(browser, page, baseUrl);
   }
