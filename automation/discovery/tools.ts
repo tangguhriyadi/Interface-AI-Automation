@@ -46,7 +46,46 @@ export const DoneArgsSchema = z.object({
 });
 export type DoneArgs = z.infer<typeof DoneArgsSchema>;
 
-export const EscalateArgsSchema = z.object({ reason: z.string().min(1) });
+/**
+ * A closed set, not free text — the same rule everything else in this
+ * surface follows: the model points, the system composes. `escalate` was
+ * the one exception (a free-text `reason`), and the exception is exactly
+ * what leaked a member's name into evidence, live (docs/plans/03-discovery-loop.md,
+ * Phase 7). Fixed by construction, not by filtering: there is no longer any
+ * channel for the model to write prose at all, so there is nothing to
+ * scrub. A reason code can be routed by whatever's on the other end of an
+ * escalation; free prose can't.
+ */
+export const ESCALATE_REASON_CODES = [
+  /** The model's last action was refused because it's classified irreversible. */
+  "action_refused_irreversible",
+  /** No clear way to make progress toward the goal. */
+  "stuck",
+  /** The page shows something the model didn't expect and doesn't know how to handle. */
+  "unexpected_state",
+  /** The goal cannot be completed with what's available here. */
+  "cannot_complete",
+] as const;
+export const EscalateReasonCodeSchema = z.enum(ESCALATE_REASON_CODES);
+export type EscalateReasonCode = z.infer<typeof EscalateReasonCodeSchema>;
+
+/**
+ * `frameId`/`ref` optionally point at the element the model considers
+ * blocking — the same frameId+ref shape every other tool uses, never
+ * interpolated into human-readable text (discover.ts composes the actual
+ * escalation reason from facts it already holds and already redacts: the
+ * last tool call, its own refusal message, the turn count, the URL — not
+ * from this ref's content). Must be given together or not at all.
+ */
+export const EscalateArgsSchema = z
+  .object({
+    reasonCode: EscalateReasonCodeSchema,
+    frameId: z.string().min(1).optional(),
+    ref: z.string().min(1).optional(),
+  })
+  .refine((args) => (args.frameId === undefined) === (args.ref === undefined), {
+    message: "frameId and ref must be given together, or neither.",
+  });
 export type EscalateArgs = z.infer<typeof EscalateArgsSchema>;
 
 export type ToolCall =
@@ -178,11 +217,20 @@ export const DISCOVERY_TOOL_DEFINITIONS = [
   {
     name: "escalate",
     description:
-      "Stop and hand off to a human. Use this when the goal can't be completed safely or at all — for example an action was refused because it's classified irreversible, or you're stuck.",
+      "Stop and hand off to a human. Choose the reasonCode that best matches why, and optionally point at the element you consider blocking (the same frameId+ref shape every other tool uses). You never write a free-text explanation — the system composes one from what it already knows: your last action, why it was refused, how many steps you've taken, and the current URL.",
     input_schema: {
       type: "object",
-      properties: { reason: { type: "string", description: "Why you're escalating." } },
-      required: ["reason"],
+      properties: {
+        reasonCode: {
+          type: "string",
+          enum: ESCALATE_REASON_CODES as unknown as string[],
+          description:
+            'action_refused_irreversible: your last action was refused because it\'s classified irreversible. stuck: you don\'t see a way to make progress toward the goal. unexpected_state: the page shows something you didn\'t expect and don\'t know how to handle. cannot_complete: the goal cannot be completed with what\'s available here.',
+        },
+        frameId: { type: "string", description: "Optional. The frame containing the element you consider blocking." },
+        ref: { type: "string", description: "Optional. The ref of the element you consider blocking, from the current snapshot." },
+      },
+      required: ["reasonCode"],
     },
   },
 ] as const;

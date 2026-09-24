@@ -11,7 +11,7 @@ import type { Step } from "../schema/step.js";
 import { buildCompactView, redactSecretValuesInView, refKey } from "./compactView.js";
 import { deriveCheckpoint } from "./deriveCheckpoint.js";
 import type { DiscoveryContext, DiscoveryGoalInfo, DiscoveryModel, TurnHistoryEntry } from "./model.js";
-import type { ToolCall } from "./tools.js";
+import type { EscalateReasonCode, ToolCall } from "./tools.js";
 
 export interface DiscoveryInputSpec {
   /** The literal runtime value for this one discovery session — known only to the driver, never sent to the model as a value (design decision 3: the model names a declared input, never sees or supplies its value). */
@@ -221,6 +221,30 @@ function valuesOfSensitivity(known: KnownValue[], sensitivities: Sensitivity[]):
 }
 
 /**
+ * Builds the human-readable escalation reason entirely from facts the
+ * driver already holds and already redacts — never from anything the model
+ * wrote. `escalate` takes a closed `reasonCode` plus an optional pointer to
+ * the element the model considers blocking (never interpolated into this
+ * text — see `EscalateArgsSchema`'s own doc comment). `lastEntry.result` is
+ * safe to include verbatim: every `TurnHistoryEntry.result` this loop
+ * constructs is already either a generic structural description (a ref, a
+ * role, a control name from the app profile or the page's own stable UI
+ * labels) or redacted by declared sensitivity — never raw page content.
+ */
+function composeEscalationReason(
+  reasonCode: EscalateReasonCode,
+  turnsTaken: number,
+  url: string | undefined,
+  lastEntry: TurnHistoryEntry | undefined,
+): string {
+  const parts = [`reasonCode=${reasonCode}`, `afterTurns=${turnsTaken}`, `url=${url ?? "(unknown)"}`];
+  if (lastEntry) {
+    parts.push(`lastAction=${lastEntry.toolCall.tool}`, `lastResult="${lastEntry.result}"`);
+  }
+  return parts.join("; ");
+}
+
+/**
  * Runs the observe -> decide -> act discovery loop against a live surface,
  * emitting a draft capability artifact on success. Every action passes the
  * policy gate (an irreversible-classified control is never executed —
@@ -259,6 +283,7 @@ export async function discover(
   const allowlistOrigin = appProfile.allowlist.originPattern;
   let stepCounter = 0;
   let previousSnapshot: Snapshot | undefined;
+  let previousWrittenOutputsCount = 0;
   let noOpStreak = 0;
   // False-positive guard for session-expiry detection, same as replay() — only treat the
   // app profile's sessionExpiry shape as meaningful once we've actually left entryPoint.
@@ -384,7 +409,14 @@ export async function discover(
 
     // detection.kind === "settled" — this is the snapshot the model actually sees.
     const snapshot = detection.snapshot;
-    if (previousSnapshot && snapshotsStructurallyEqual(previousSnapshot, snapshot)) {
+    // A successful `read` never changes the page — it's not supposed to — so a run of
+    // several reads in a row (a completely ordinary way to finish a goal with multiple
+    // declared outputs) would otherwise look identical to the model being stuck, purely
+    // because nothing in the DOM moved. Real progress is "the snapshot changed" OR "a new
+    // output got written since the last check" — either counts, not just the first.
+    const unchangedPage = previousSnapshot !== undefined && snapshotsStructurallyEqual(previousSnapshot, snapshot);
+    const noNewOutputs = writtenOutputs.size === previousWrittenOutputsCount;
+    if (unchangedPage && noNewOutputs) {
       noOpStreak += 1;
     } else {
       noOpStreak = 0;
@@ -393,6 +425,7 @@ export async function discover(
       return finalize({ status: "dead_end", repeatedTurns: noOpStreak });
     }
     previousSnapshot = snapshot;
+    previousWrittenOutputsCount = writtenOutputs.size;
 
     const secretValuesForRedaction = valuesOfSensitivity(knownValues, ["secret"]);
     const sensitiveValuesForSafetyNet = valuesOfSensitivity(knownValues, ["secret", "pii"]);
@@ -439,8 +472,11 @@ export async function discover(
     const call: ToolCall = turn.call;
 
     if (call.tool === "escalate") {
-      turnLog.push({ toolName: "escalate", outcome: "executed", detail: call.args.reason });
-      return finalize({ status: "escalated", reason: call.args.reason });
+      const mainFrame = snapshot.frames.find((f) => f.frameId === "main");
+      const lastEntry = modelHistory[modelHistory.length - 1];
+      const reason = composeEscalationReason(call.args.reasonCode, modelHistory.length, mainFrame?.url, lastEntry);
+      turnLog.push({ toolName: "escalate", outcome: "executed", detail: reason });
+      return finalize({ status: "escalated", reason });
     }
 
     if (call.tool === "done") {

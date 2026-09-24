@@ -1,0 +1,25 @@
+{
+  "runKind": "discovery",
+  "goal": "Log in to the credit union console, search for the member with this memberId, and open a new sub-account for them.",
+  "entryPoint": "/login",
+  "writtenAt": "2026-09-24T04:14:09.515Z",
+  "durationMs": 16805,
+  "status": "escalated",
+  "inputs": {
+    "username": {
+      "sensitivity": "none",
+      "value": "teller"
+    },
+    "password": {
+      "sensitivity": "secret",
+      "value": "[REDACTED:secret]"
+    },
+    "memberId": {
+      "sensitivity": "pii",
+      "value": "[REDACTED:pii]"
+    }
+  },
+  "turnCount": 7,
+  "recoveries": [],
+  "reason": "reasonCode=action_refused_irreversible; afterTurns=6; url=http://localhost:4000/members/10001; lastAction=click; lastResult=\"refused: ref \"19\" (role \"button\", name \"Open Sub-Account\") is classified irreversible — cannot execute during discovery; call escalate if this action is required\""
+}

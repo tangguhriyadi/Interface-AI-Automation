@@ -74,11 +74,19 @@ describe("formatSnapshotForModel", () => {
   const text = formatSnapshotForModel(snapshot);
 
   it("labels the main frame plainly", () => {
-    expect(text).toContain("[frame main: main]");
+    expect(text).toContain('[frame frameId="main"]');
   });
 
-  it("describes a named frame by how it's identified", () => {
-    expect(text).toContain('[frame iframe:Account Balance: title="Account Balance"]');
+  it("describes a named frame by how it's identified, with frameId quoted and unambiguous", () => {
+    expect(text).toContain('[frame frameId="iframe:Account Balance" title="Account Balance"]');
+  });
+
+  it("keeps frameId parseable even though it contains a colon itself — the bug found live", () => {
+    // A naive split on ": " would previously have swallowed the trailing title="..." into
+    // what looked like the frameId. Quoting frameId as its own key=value pair prevents that.
+    const frameLine = text.split("\n").find((line) => line.includes("Account Balance"))!;
+    const match = frameLine.match(/frameId="([^"]*)"/);
+    expect(match?.[1]).toBe("iframe:Account Balance");
   });
 
   it("includes ref, role, and name for a node", () => {

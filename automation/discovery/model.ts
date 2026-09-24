@@ -47,8 +47,19 @@ export interface DiscoveryModel {
   chooseNextAction(context: DiscoveryContext): Promise<ModelTurn>;
 }
 
+/**
+ * `frameId` is quoted and always the first, unambiguous attribute — a
+ * frameId can itself contain a colon (e.g. `iframe:Account Balance`), and
+ * the earlier unquoted `[frame iframe:Account Balance: title="..."]` format
+ * left no clear boundary between the id and the descriptive attribute that
+ * followed it. Confirmed live: the model copied the whole trailing string,
+ * including `: title="Account Balance"`, as if it were part of the frameId,
+ * and the read it attempted with that malformed id was correctly refused —
+ * wasting a turn on a formatting ambiguity, not a real mistake.
+ */
 function describeFrame(frame: CompactFrameView): string {
-  return frame.frame ? `[frame ${frame.frameId}: ${frame.frame.by}="${frame.frame.value}"]` : `[frame ${frame.frameId}: main]`;
+  const identity = `frameId="${frame.frameId}"`;
+  return frame.frame ? `[frame ${identity} ${frame.frame.by}="${frame.frame.value}"]` : `[frame ${identity}]`;
 }
 
 function describeNode(node: CompactFrameView["nodes"][number]): string {
@@ -92,7 +103,7 @@ export function buildSystemPrompt(goal: DiscoveryGoalInfo): string {
     "- select(frameId, ref, inputName) — same as type, for a select/combobox",
     "- read(frameId, ref, outputName) — outputName must be one of the declared outputs below, and not already written",
     "- done(proof) — point at the ref (or, to prove success by a whole frame's presence, name only the frameId) whose presence proves the goal succeeded; the system verifies this itself and refuses if it isn't true yet, or if any declared output is still unwritten",
-    "- escalate(reason) — stop and hand off to a human when the goal can't be completed safely or at all",
+    "- escalate(reasonCode, frameId?, ref?) — stop and hand off to a human when the goal can't be completed safely or at all. reasonCode is one of: action_refused_irreversible, stuck, unexpected_state, cannot_complete. You never write a free-text explanation; the system composes one from what it already knows. frameId+ref are optional, and only point at the element you consider blocking — the same shape every other tool uses.",
     "",
     "There is no way to navigate to an arbitrary URL. Every transition happens by acting on the page.",
     "",

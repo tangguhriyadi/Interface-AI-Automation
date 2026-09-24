@@ -84,13 +84,33 @@ describe("parseToolCall", () => {
   });
 
   describe("escalate", () => {
-    it("accepts a reason", () => {
-      const result = parseToolCall("escalate", { reason: "The goal requires clicking a control classified irreversible." });
+    it("accepts a bare reasonCode, no ref needed", () => {
+      const result = parseToolCall("escalate", { reasonCode: "stuck" });
       expect(result.ok).toBe(true);
     });
 
-    it("rejects an empty reason", () => {
-      const result = parseToolCall("escalate", { reason: "" });
+    it("accepts a reasonCode with a frameId+ref pair pointing at the blocking element", () => {
+      const result = parseToolCall("escalate", { reasonCode: "action_refused_irreversible", frameId: "main", ref: "7" });
+      expect(result.ok).toBe(true);
+    });
+
+    it("rejects free text in place of a reasonCode — there is no free-text channel", () => {
+      const result = parseToolCall("escalate", { reason: "The goal requires clicking a control classified irreversible." });
+      expect(result.ok).toBe(false);
+    });
+
+    it("rejects a reasonCode outside the closed set", () => {
+      const result = parseToolCall("escalate", { reasonCode: "because I said so" });
+      expect(result.ok).toBe(false);
+    });
+
+    it("rejects ref given without frameId", () => {
+      const result = parseToolCall("escalate", { reasonCode: "stuck", ref: "7" });
+      expect(result.ok).toBe(false);
+    });
+
+    it("rejects frameId given without ref", () => {
+      const result = parseToolCall("escalate", { reasonCode: "stuck", frameId: "main" });
       expect(result.ok).toBe(false);
     });
   });

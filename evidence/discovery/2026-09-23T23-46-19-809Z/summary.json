@@ -1,0 +1,29 @@
+{
+  "runKind": "discovery",
+  "goal": "Log in to the credit union console, search for the member with this memberId, and read their full name and savings balance.",
+  "entryPoint": "/login",
+  "writtenAt": "2026-09-23T23:46:19.809Z",
+  "durationMs": 18218,
+  "status": "done",
+  "inputs": {
+    "username": {
+      "sensitivity": "none",
+      "value": "teller"
+    },
+    "password": {
+      "sensitivity": "secret",
+      "value": "[REDACTED:secret]"
+    },
+    "memberId": {
+      "sensitivity": "pii",
+      "value": "[REDACTED:pii]"
+    }
+  },
+  "turnCount": 9,
+  "recoveries": [],
+  "capabilityId": "discovered_lookup_member_savings_balance",
+  "outputNames": [
+    "memberName",
+    "savingsBalance"
+  ]
+}

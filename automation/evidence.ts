@@ -79,6 +79,24 @@ function needsScreenshot(status: string): boolean {
   return status !== "success" && status !== "done" && status !== "business_outcome";
 }
 
+/**
+ * "What input produced this?" is the first debugging question a human
+ * reviewer has, and two runs of the same capability with different inputs
+ * otherwise leave nearly-identical evidence with nothing distinguishing
+ * them. Records every declared input's name and sensitivity, with its
+ * value redacted per the *existing* rule (`redactForLog`) — a `none`
+ * input's literal value is genuinely useful and shows up as-is (e.g.
+ * confirming which username a run used); a `secret`/`pii` input's value
+ * stays exactly as hidden as it already is everywhere else in evidence.
+ */
+function redactedInputsSummary(
+  entries: [string, { value: string; sensitivity: Sensitivity }][],
+): Record<string, { sensitivity: Sensitivity; value: string }> {
+  return Object.fromEntries(
+    entries.map(([name, { value, sensitivity }]) => [name, { sensitivity, value: redactForLog(value, sensitivity) }]),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // replay
 // ---------------------------------------------------------------------------
@@ -176,6 +194,9 @@ export async function writeReplayEvidence(
     writtenAt: now.toISOString(),
     durationMs: result.durationMs,
     status: result.status,
+    inputs: redactedInputsSummary(
+      Object.entries(capability.inputs).map(([name, spec]) => [name, { value: inputs[name] ?? "", sensitivity: spec.sensitivity }]),
+    ),
     stepCount: result.steps.length,
     steps: result.steps.map((s) => ({
       stepId: s.stepId,
@@ -225,6 +246,8 @@ function discoveryStatusDetail(result: DiscoveryResult, scrub: (text: string) =>
 export interface DiscoveryGoalSummary {
   description: string;
   entryPoint: string;
+  /** Structurally matches `DiscoveryGoal.inputs` — a caller with a real `DiscoveryGoal` can pass it directly. */
+  inputs: Record<string, { value: string; sensitivity: Sensitivity }>;
 }
 
 /** Writes a completed `discover()` run's evidence: `steps.jsonl` (one turn per line) and a human-readable `summary.json`, under `evidence/discovery/<timestamp>/` — discovery has no stable id to name the folder by until it succeeds. A screenshot is captured only when the run didn't end in `done`. */
@@ -250,6 +273,7 @@ export async function writeDiscoveryEvidence(
     writtenAt: now.toISOString(),
     durationMs: result.durationMs,
     status: result.status,
+    inputs: redactedInputsSummary(Object.entries(goal.inputs)),
     turnCount: result.turns.length,
     recoveries: result.recoveries,
     ...discoveryStatusDetail(result, scrub),

@@ -154,14 +154,17 @@ describe("discover — an irreversible-control click is refused, never executed;
     const model = new FakeModel();
     model.turnQueue = [
       { kind: "tool_call", call: { tool: "click", args: { frameId: "main", ref: refOf(page, "button", "Delete Account") } } },
-      { kind: "tool_call", call: { tool: "escalate", args: { reason: "The only available action is classified irreversible." } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "action_refused_irreversible" } } },
     ];
 
     const result = await discover(baseGoal, profile, adapter, model);
 
     expect(result.status).toBe("escalated");
     if (result.status === "escalated") {
-      expect(result.reason).toBe("The only available action is classified irreversible.");
+      // Composed by the system from facts it already holds — never free text from the
+      // model, so it necessarily includes the reason code and the refusal it followed.
+      expect(result.reason).toContain("reasonCode=action_refused_irreversible");
+      expect(result.reason).toContain("irreversible");
     }
     expect(adapter.clickLog).toHaveLength(0);
     expect(result.turns.some((t) => t.toolName === "click" && t.outcome === "refused" && /irreversible/i.test(t.detail))).toBe(
@@ -185,6 +188,34 @@ describe("discover — dead_end: several actions in a row with no change in the 
     const result = await discover(baseGoal, baseAppProfile, adapter, model, { deadEndThreshold: 3, maxSteps: 25 });
 
     expect(result.status).toBe("dead_end");
+  });
+
+  it("does NOT trigger on several consecutive successful reads, even though a read never changes the page by design", async () => {
+    // Live-discovered bug: a read is never supposed to mutate the page, so three reads in a
+    // row on the same settled page — an entirely ordinary way to finish a goal with three
+    // declared outputs — looked structurally identical to the model being stuck. Real
+    // progress is "the snapshot changed" OR "a new output got written," not just the first.
+    const page = snapshotAt('- heading "Report" [level=1]\n- cell "AlphaValue"\n- cell "BetaValue"\n- cell "GammaValue"\n');
+    const goal: DiscoveryGoal = {
+      ...baseGoal,
+      outputs: { a: { sensitivity: "none" }, b: { sensitivity: "none" }, c: { sensitivity: "none" } },
+    };
+
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page]; // the exact same page for every single iteration
+    adapter.readValue = "same-value-every-time";
+
+    const model = new FakeModel();
+    model.turnQueue = [
+      { kind: "tool_call", call: { tool: "read", args: { frameId: "main", ref: refOf(page, "cell", "AlphaValue"), outputName: "a" } } },
+      { kind: "tool_call", call: { tool: "read", args: { frameId: "main", ref: refOf(page, "cell", "BetaValue"), outputName: "b" } } },
+      { kind: "tool_call", call: { tool: "read", args: { frameId: "main", ref: refOf(page, "cell", "GammaValue"), outputName: "c" } } },
+      { kind: "tool_call", call: { tool: "done", args: { proof: { frameId: "main", ref: refOf(page, "heading") } } } },
+    ];
+
+    const result = await discover(goal, baseAppProfile, adapter, model, { deadEndThreshold: 3 });
+
+    expect(result.status).toBe("done");
   });
 });
 
@@ -228,13 +259,15 @@ describe("discover — escalated (direct)", () => {
     const adapter = new FakeAdapter();
     adapter.snapshotQueue = [page];
     const model = new FakeModel();
-    model.turnQueue = [{ kind: "tool_call", call: { tool: "escalate", args: { reason: "Ambiguous page, needs a human." } } }];
+    model.turnQueue = [{ kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } }];
 
     const result = await discover(baseGoal, baseAppProfile, adapter, model);
 
     expect(result.status).toBe("escalated");
     if (result.status === "escalated") {
-      expect(result.reason).toBe("Ambiguous page, needs a human.");
+      expect(result.reason).toContain("reasonCode=stuck");
+      // The very first turn — no prior action to report, and the composer handles that gracefully.
+      expect(result.reason).not.toContain("lastAction");
     }
   });
 });
@@ -374,7 +407,7 @@ describe("discover — the checkpoint safety net only blocks values long enough 
     model.turnQueue = [
       { kind: "tool_call", call: { tool: "read", args: { frameId: "main", ref: refOf(page, "cell"), outputName: "memberName" } } },
       { kind: "tool_call", call: { tool: "done", args: { proof: { frameId: "main", ref: refOf(page, "heading") } } } }, // refused
-      { kind: "tool_call", call: { tool: "escalate", args: { reason: "Confirming the refusal happened; stopping here." } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "cannot_complete" } } },
     ];
 
     const result = await discover(goal, baseAppProfile, adapter, model);

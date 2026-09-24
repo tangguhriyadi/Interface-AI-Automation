@@ -1,0 +1,7 @@
+{"stepId":"type-1","action":"type","outcome":"ok","durationMs":8,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"teller"}
+{"stepId":"type-2","action":"type","outcome":"ok","durationMs":21,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:secret]"}
+{"stepId":"click-3","action":"click","outcome":"ok","durationMs":51,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"type-4","action":"type","outcome":"ok","durationMs":4,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:pii]"}
+{"stepId":"click-5","action":"click","outcome":"ok","durationMs":43,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"read-6","action":"read","outcome":"ok","durationMs":1,"recoveriesFired":[],"matchedStrategy":"structural","observedValue":"[REDACTED:pii]"}
+{"stepId":"read-7","action":"read","outcome":"ok","durationMs":3,"recoveriesFired":[],"matchedStrategy":"structural","observedValue":"[REDACTED:pii]"}

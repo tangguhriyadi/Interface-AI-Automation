@@ -71,3 +71,20 @@ change) and making a second protected request — see `session-expired.aria.yaml
 This confirms the heading alone cannot distinguish "first visit to login" from "redirected
 here after expiry" — the `role="alert"` notice is load-bearing, not an arbitrary choice of
 signal.
+
+## Addendum: irreversibleControls (added for /automation's discovery loop, Phase 7)
+
+Discovery's pre-action policy gate needs at least one real, app-profile-declared
+irreversible control to prove it live (docs/plans/03-discovery-loop.md, decision 2). The
+member detail page has two candidate buttons — `Log In`/`Log Out`-adjacent navigation isn't
+what CLAUDE.md's classification is for; **"Open Sub-Account"** is: creating a new financial
+sub-account is a real, hard-to-undo business action, the same category as the irreversible
+example CLAUDE.md itself gestures at. Captured by driving the running app to a member's
+detail page — see `irreversible-control-open-sub-account.aria.yaml` — confirming the exact
+role (`button`) and accessible name (`Open Sub-Account`) now declared in
+`irreversibleControls`. Deliberately not clicked as part of this verification: only its
+existence and exact name needed confirming, since discovery must never execute it regardless.
+
+| Signal | Observed |
+|---|---|
+| `role: "button", name: "Open Sub-Account"` | `button "Open Sub-Account"` — exact |

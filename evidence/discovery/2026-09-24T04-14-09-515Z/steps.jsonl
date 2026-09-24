@@ -1,0 +1,7 @@
+{"toolName":"type","outcome":"executed","detail":"typed the declared input \"username\" into ref \"12\" in frame \"main\""}
+{"toolName":"type","outcome":"executed","detail":"typed the declared input \"password\" into ref \"16\" in frame \"main\""}
+{"toolName":"click","outcome":"executed","detail":"clicked ref \"17\" in frame \"main\""}
+{"toolName":"type","outcome":"executed","detail":"typed the declared input \"memberId\" into ref \"12\" in frame \"main\""}
+{"toolName":"click","outcome":"executed","detail":"clicked ref \"13\" in frame \"main\""}
+{"toolName":"click","outcome":"refused","detail":"refused: ref \"19\" (role \"button\", name \"Open Sub-Account\") is classified irreversible — cannot execute during discovery; call escalate if this action is required"}
+{"toolName":"escalate","outcome":"executed","detail":"reasonCode=action_refused_irreversible; afterTurns=6; url=http://localhost:4000/members/10001; lastAction=click; lastResult=\"refused: ref \"19\" (role \"button\", name \"Open Sub-Account\") is classified irreversible — cannot execute during discovery; call escalate if this action is required\""}

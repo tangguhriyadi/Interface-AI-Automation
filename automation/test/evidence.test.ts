@@ -112,6 +112,13 @@ describe("writeReplayEvidence", () => {
       { stepId: "type-password", action: "type", outcome: "ok", matchedStrategy: "role", durationMs: 12 },
       { stepId: "read-balance", action: "read", outcome: "ok", matchedStrategy: "role", durationMs: 8 },
     ]);
+    // "What input produced this?" — a none-sensitivity input's literal value is genuinely
+    // useful and shows as-is; a secret input's value stays exactly as hidden as it already
+    // is everywhere else in evidence, redacted per the same existing rule.
+    expect(summary.inputs).toEqual({
+      username: { sensitivity: "none", value: "teller" },
+      password: { sensitivity: "secret", value: "[REDACTED:secret]" },
+    });
     // The raw output value is never persisted to evidence, even though `result.outputs`
     // itself stayed unredacted for the in-memory caller — the whole point of "that's what
     // the caller asked for" only applies to the direct result, not what lands on disk.
@@ -168,7 +175,14 @@ describe("writeReplayEvidence", () => {
 });
 
 describe("writeDiscoveryEvidence", () => {
-  const goal = { description: "Look up a member's balance.", entryPoint: "/login" };
+  const goal = {
+    description: "Look up a member's balance.",
+    entryPoint: "/login",
+    inputs: {
+      username: { value: "teller", sensitivity: "none" as const },
+      memberId: { value: "10001", sensitivity: "pii" as const },
+    },
+  };
 
   it("scrubs a member name quoted in the model's own escalate reason", async () => {
     const result: DiscoveryResult = {
@@ -229,6 +243,10 @@ describe("writeDiscoveryEvidence", () => {
 
     const summary = JSON.parse(await readFile(written.summaryPath, "utf-8"));
     expect(summary).toMatchObject({ status: "done", capabilityId: "test_capability", turnCount: 2 });
+    expect(summary.inputs).toEqual({
+      username: { sensitivity: "none", value: "teller" },
+      memberId: { sensitivity: "pii", value: "[REDACTED:pii]" },
+    });
     expect(written.screenshotPath).toBeUndefined();
     expect(adapter.screenshotCallCount).toBe(0);
   });
@@ -270,7 +288,7 @@ describe("the default evidence directory is resolved relative to the repo root, 
         knownSensitiveValues: [],
       };
       written = await writeDiscoveryEvidence(
-        { description: "x", entryPoint: "/x" },
+        { description: "x", entryPoint: "/x", inputs: {} },
         result,
         new FakeAdapter(),
         { now: () => new Date("2026-03-03T00:00:01.000Z") },

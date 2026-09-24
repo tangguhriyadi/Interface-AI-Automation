@@ -1,0 +1,30 @@
+# Captured via `page.locator("body").ariaSnapshot()` against a live target-app
+# instance (search -> memberId 10001 -> GET /members/10001, main frame), 2026-09-24.
+# Supports the app profile's irreversibleControls declaration: creating a new
+# sub-account is the one control on this page whose effect matches CLAUDE.md's
+# definition of irreversible (a real business action, not a view/navigation
+# control like "Log Out"). Not clicked as part of this verification — the
+# control's existence and exact accessible name is what's being confirmed, not
+# its resulting behavior, since discovery must never execute it in the first
+# place.
+- table:
+  - rowgroup:
+    - 'row "Member: Elena Cho"':
+      - 'cell "Member: Elena Cho"':
+        - 'heading "Member: Elena Cho" [level=1]'
+    - row "Name Elena Cho Member ID 10001 Status active Account Balance Open Sub-Account Log Out":
+      - cell "Name Elena Cho Member ID 10001 Status active Account Balance Open Sub-Account Log Out":
+        - table:
+          - rowgroup:
+            - row "Name Elena Cho":
+              - rowheader "Name"
+              - cell "Elena Cho"
+            - row "Member ID 10001":
+              - rowheader "Member ID"
+              - cell "10001"
+            - row "Status active":
+              - rowheader "Status"
+              - cell "active"
+        - iframe
+        - button "Open Sub-Account"
+        - button "Log Out"
