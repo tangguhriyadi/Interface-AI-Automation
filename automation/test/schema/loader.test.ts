@@ -6,6 +6,7 @@ import {
   loadAppProfile,
   loadCapability,
   loadCapabilityWithAppProfile,
+  loadDiscoveryGoalFile,
   loadTenantOverlay,
   validateBusinessOutcomesAgainstProfile,
 } from "../../schema/loader.js";
@@ -107,6 +108,41 @@ describe("loadTenantOverlay", () => {
   it("throws a clear error when the JSON fails schema validation", () => {
     const path = writeJson("invalid-overlay.json", { schemaVersion: "1.0.0", appId: "x", tenantId: "beta" });
     expect(() => loadTenantOverlay(path)).toThrow(/Invalid tenant overlay/);
+  });
+});
+
+describe("loadDiscoveryGoalFile", () => {
+  const validGoalFile = {
+    capabilityId: "lookup_member_savings_balance",
+    version: "1.0.0",
+    appId: "fake-credit-union-console",
+    description: "Look up a member's savings balance.",
+    entryPoint: "/login",
+    inputs: {
+      username: { sensitivity: "none" },
+      password: { sensitivity: "secret" },
+      memberId: { sensitivity: "pii" },
+    },
+    outputs: { savingsBalance: { sensitivity: "pii" } },
+  };
+
+  it("reads and validates a well-formed goal file", () => {
+    const path = writeJson("goal.json", validGoalFile);
+    const goal = loadDiscoveryGoalFile(path);
+    expect(goal.capabilityId).toBe("lookup_member_savings_balance");
+    expect(goal.inputs.password).toEqual({ sensitivity: "secret" });
+  });
+
+  it("never carries a literal input value — only name and sensitivity, unlike a resolved DiscoveryGoal", () => {
+    const path = writeJson("goal.json", validGoalFile);
+    const goal = loadDiscoveryGoalFile(path);
+    expect(goal.inputs.username).not.toHaveProperty("value");
+  });
+
+  it("throws a clear error when the JSON fails schema validation", () => {
+    const { entryPoint: _entryPoint, ...invalid } = validGoalFile;
+    const path = writeJson("invalid-goal.json", invalid);
+    expect(() => loadDiscoveryGoalFile(path)).toThrow(/Invalid discovery goal file/);
   });
 });
 

@@ -1,0 +1,92 @@
+# Captured live against a running target-app instance (search -> memberId 10001 ->
+# GET /members/10001 -> click "Open Sub-Account" -> fill form -> "Continue" -> "Confirm
+# and Open Account"), 2026-09-24, via automation's own PlaywrightAdapter — never by
+# reading target-app's source (CLAUDE.md's hard boundary).
+#
+# Corrects an earlier assumption (irreversible-control-open-sub-account.aria.yaml,
+# Phase 7 of docs/plans/03-discovery-loop.md): that verification confirmed only that
+# the "Open Sub-Account" button exists, not what clicking it actually does. It turns
+# out to be a real 3-page wizard, and "Open Sub-Account" itself is just navigation to
+# the first page — nothing is created until the very last click. The app profile's
+# `irreversibleControls` has been corrected accordingly (was "Open Sub-Account", now
+# "Confirm and Open Account" — see test/capabilities/targetAppProfile.test.ts).
+
+# --- Page 1: GET /members/10001/sub-account/new (after clicking "Open Sub-Account") ---
+# A safe navigation — no side effect, nothing created yet.
+- table:
+  - rowgroup:
+    - row "Open Sub-Account":
+      - cell "Open Sub-Account":
+        - heading "Open Sub-Account" [level=1]
+    - row "Account Type Select an account type Initial Deposit I agree to the terms and conditions Continue Log Out":
+      - cell "Account Type Select an account type Initial Deposit I agree to the terms and conditions Continue Log Out":
+        - table:
+          - rowgroup:
+            - row "Account Type Select an account type":
+              - cell "Account Type"
+              - cell "Select an account type":
+                - combobox "Account Type":
+                  - option "Select an account type" [selected]
+                  - option "Savings Club"
+                  - option "Money Market"
+                  - option "Certificate of Deposit"
+            - row "Initial Deposit":
+              - cell "Initial Deposit"
+              - cell:
+                - textbox "Initial Deposit"
+            - row "I agree to the terms and conditions":
+              - cell "I agree to the terms and conditions"
+              - cell "I agree to the terms and conditions":
+                - checkbox "I agree to the terms and conditions"
+        - button "Continue"
+        - button "Log Out"
+
+# --- Page 2: GET /members/10001/sub-account/review (after filling the form, clicking "Continue") ---
+# Still a safe navigation — a review/confirmation screen, not a mutation. The account
+# type and initial deposit shown here are exactly what will be created, restated for
+# the human to verify before the one truly irreversible click.
+- table:
+  - rowgroup:
+    - row "Review Sub-Account":
+      - cell "Review Sub-Account":
+        - heading "Review Sub-Account" [level=1]
+    - row "Account Type Savings Club Initial Deposit $500.00 Terms Accepted Yes Back Confirm and Open Account Log Out":
+      - cell "Account Type Savings Club Initial Deposit $500.00 Terms Accepted Yes Back Confirm and Open Account Log Out":
+        - table:
+          - rowgroup:
+            - row "Account Type Savings Club":
+              - rowheader "Account Type"
+              - cell "Savings Club"
+            - row "Initial Deposit $500.00":
+              - rowheader "Initial Deposit"
+              - cell "$500.00"
+            - row "Terms Accepted Yes":
+              - rowheader "Terms Accepted"
+              - cell "Yes"
+        - button "Back"
+        - button "Confirm and Open Account"
+        - button "Log Out"
+
+# --- Page 3: GET /members/10001/sub-account/{id}/created (after clicking "Confirm and Open Account") ---
+# THE irreversible transition. This is the successCheckpoint page for
+# open-member-sub-account.artifact.json: "heading_starts_with: Sub-Account Created".
+# The created sub-account's id is server-generated (e.g. "SA-0001") — never a literal
+# in the checkpoint, same rule as every other checkpoint in this project.
+- table:
+  - rowgroup:
+    - row "Sub-Account Created":
+      - cell "Sub-Account Created":
+        - heading "Sub-Account Created" [level=1]
+    - row "Sub-Account ID: SA-0001 Account Type Money Market Initial Deposit $750.00 Back to Member Log Out":
+      - cell "Sub-Account ID: SA-0001 Account Type Money Market Initial Deposit $750.00 Back to Member Log Out":
+        - paragraph: "Sub-Account ID: SA-0001"
+        - table:
+          - rowgroup:
+            - row "Account Type Money Market":
+              - rowheader "Account Type"
+              - cell "Money Market"
+            - row "Initial Deposit $750.00":
+              - rowheader "Initial Deposit"
+              - cell "$750.00"
+        - button "Back to Member"
+        - button "Log Out"

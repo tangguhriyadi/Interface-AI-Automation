@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc --noEmit",
     "test": "vitest run --exclude \"test/integration/**\"",
-    "test:integration": "node --env-file=.env node_modules/vitest/dist/cli.js run test/integration"
+    "test:integration": "node --env-file=.env node_modules/vitest/dist/cli.js run test/integration",
+    "cli": "node --env-file=.env node_modules/tsx/dist/cli.mjs cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

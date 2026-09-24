@@ -1,0 +1,215 @@
+{
+  "schemaVersion": "1.0.0",
+  "capabilityId": "open_member_sub_account",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "description": "Logs in, finds a member by ID, and opens a new sub-account for them — the one genuinely irreversible flow in this app. Live-verified 2026-09-24 (evidence/app-profile-verification/open-member-sub-account-flow.aria.yaml): the wizard is three pages (new -> review -> created), and nothing is created until the final 'Confirm and Open Account' click on the review page — the earlier 'Open Sub-Account' button is just navigation to the form, not the irreversible action itself.",
+  "entryPoint": "/login",
+  "inputs": {
+    "username": {
+      "type": "string",
+      "sensitivity": "none",
+      "description": "Test operator login username."
+    },
+    "password": {
+      "type": "string",
+      "sensitivity": "secret",
+      "description": "Test operator login password."
+    },
+    "memberId": {
+      "type": "string",
+      "sensitivity": "pii",
+      "description": "The member ID to open a sub-account for."
+    },
+    "accountType": {
+      "type": "string",
+      "sensitivity": "none",
+      "description": "One of the account type options exactly as rendered: \"Savings Club\", \"Money Market\", or \"Certificate of Deposit\"."
+    },
+    "initialDeposit": {
+      "type": "string",
+      "sensitivity": "none",
+      "description": "The initial deposit amount, as a plain number (e.g. \"500\") — the app renders it back formatted as currency on the review and created pages."
+    }
+  },
+  "outputs": {},
+  "steps": [
+    {
+      "id": "type-username",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true,
+          "rationale": "The Username field has a stable accessible name via its associated <label>."
+        }
+      ],
+      "value": { "fromInput": "username" }
+    },
+    {
+      "id": "type-password",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true,
+          "rationale": "The Password field has a stable accessible name via its associated <label>."
+        }
+      ],
+      "value": { "fromInput": "password" }
+    },
+    {
+      "id": "click-log-in",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Log In",
+          "exact": true,
+          "rationale": "The only submit control on the login form."
+        }
+      ]
+    },
+    {
+      "id": "type-member-id",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Member ID",
+          "exact": true,
+          "rationale": "The search field's accessible name for the default tenant."
+        }
+      ],
+      "value": { "fromInput": "memberId" }
+    },
+    {
+      "id": "click-search",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Search",
+          "exact": true,
+          "rationale": "The search form's submit control for the default tenant."
+        }
+      ],
+      "checkpoint": {
+        "kind": "heading_starts_with",
+        "text": "Member:"
+      }
+    },
+    {
+      "id": "click-open-sub-account",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Open Sub-Account",
+          "exact": true,
+          "rationale": "The only control that starts the sub-account wizard from the member detail page. Purely navigational — verified live (open-member-sub-account-flow.aria.yaml) to have no side effect of its own, which is why it's classified safe rather than irreversible."
+        }
+      ],
+      "checkpoint": {
+        "kind": "heading_starts_with",
+        "text": "Open Sub-Account"
+      }
+    },
+    {
+      "id": "select-account-type",
+      "action": "select",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "combobox",
+          "name": "Account Type",
+          "exact": true,
+          "rationale": "The wizard's only combobox; its accessible name matches the row header rendered beside it."
+        }
+      ],
+      "value": { "fromInput": "accountType" }
+    },
+    {
+      "id": "type-initial-deposit",
+      "action": "type",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "textbox",
+          "name": "Initial Deposit",
+          "exact": true,
+          "rationale": "The wizard's only free-text amount field."
+        }
+      ],
+      "value": { "fromInput": "initialDeposit" }
+    },
+    {
+      "id": "click-agree-terms",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "checkbox",
+          "name": "I agree to the terms and conditions",
+          "exact": true,
+          "rationale": "The wizard's only checkbox; starts unchecked on a fresh form, so a single click always checks it."
+        }
+      ]
+    },
+    {
+      "id": "click-continue",
+      "action": "click",
+      "classification": "safe",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Continue",
+          "exact": true,
+          "rationale": "Advances from the form to the review page. Still no side effect — verified live: the review page only restates what was entered, nothing is created yet."
+        }
+      ],
+      "checkpoint": {
+        "kind": "heading_starts_with",
+        "text": "Review Sub-Account"
+      }
+    },
+    {
+      "id": "click-confirm-and-open-account",
+      "action": "click",
+      "classification": "irreversible",
+      "target": [
+        {
+          "kind": "role",
+          "role": "button",
+          "name": "Confirm and Open Account",
+          "exact": true,
+          "rationale": "The genuine point of no return — this is the click that actually creates the sub-account, and the same control declared in the app profile's irreversibleControls. Without --allow-irreversible (and no --interactive handoff), replay stops here rather than attempting it."
+        }
+      ]
+    }
+  ],
+  "successCheckpoint": {
+    "kind": "heading_starts_with",
+    "text": "Sub-Account Created"
+  },
+  "businessOutcomes": ["member_not_found", "access_denied", "invalid_input"],
+  "approvalState": "approved"
+}

@@ -1,0 +1,16 @@
+{
+  "capabilityId": "lookup_member_savings_balance",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "description": "Log in, search for a member by ID, and read their savings balance from the Account Balance panel.",
+  "entryPoint": "/login",
+  "inputs": {
+    "username": { "sensitivity": "none" },
+    "password": { "sensitivity": "secret" },
+    "memberId": { "sensitivity": "pii" }
+  },
+  "outputs": {
+    "memberName": { "sensitivity": "pii" },
+    "savingsBalance": { "sensitivity": "pii" }
+  }
+}

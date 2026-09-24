@@ -1,0 +1,30 @@
+{
+  "runKind": "discovery",
+  "goal": "Log in, search for a member by ID, and read their savings balance from the Account Balance panel.",
+  "entryPoint": "/login",
+  "writtenAt": "2026-09-24T09:20:26.272Z",
+  "durationMs": 18219,
+  "status": "done",
+  "inputs": {
+    "username": {
+      "sensitivity": "none",
+      "value": "teller"
+    },
+    "password": {
+      "sensitivity": "secret",
+      "value": "[REDACTED:secret]"
+    },
+    "memberId": {
+      "sensitivity": "pii",
+      "value": "[REDACTED:pii]"
+    }
+  },
+  "turnCount": 9,
+  "recoveries": [],
+  "interventions": [],
+  "capabilityId": "lookup_member_savings_balance",
+  "outputNames": [
+    "memberName",
+    "savingsBalance"
+  ]
+}

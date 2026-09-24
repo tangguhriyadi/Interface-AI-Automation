@@ -1,0 +1,138 @@
+{
+  "runKind": "replay",
+  "capabilityId": "open_member_sub_account",
+  "version": "1.0.0",
+  "appId": "fake-credit-union-console",
+  "writtenAt": "2026-09-24T09:19:56.051Z",
+  "durationMs": 3096,
+  "status": "escalated",
+  "inputs": {
+    "username": {
+      "sensitivity": "none",
+      "value": "teller"
+    },
+    "password": {
+      "sensitivity": "secret",
+      "value": "[REDACTED:secret]"
+    },
+    "memberId": {
+      "sensitivity": "pii",
+      "value": "[REDACTED:pii]"
+    },
+    "accountType": {
+      "sensitivity": "none",
+      "value": "Certificate of Deposit"
+    },
+    "initialDeposit": {
+      "sensitivity": "none",
+      "value": "1250"
+    }
+  },
+  "stepCount": 11,
+  "steps": [
+    {
+      "stepId": "type-username",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 11
+    },
+    {
+      "stepId": "type-password",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 4
+    },
+    {
+      "stepId": "click-log-in",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 51
+    },
+    {
+      "stepId": "type-member-id",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 4
+    },
+    {
+      "stepId": "click-search",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 65
+    },
+    {
+      "stepId": "click-open-sub-account",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 47
+    },
+    {
+      "stepId": "select-account-type",
+      "action": "select",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 6
+    },
+    {
+      "stepId": "type-initial-deposit",
+      "action": "type",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 4
+    },
+    {
+      "stepId": "click-agree-terms",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 28
+    },
+    {
+      "stepId": "click-continue",
+      "action": "click",
+      "outcome": "ok",
+      "matchedStrategy": "role",
+      "durationMs": 50
+    },
+    {
+      "stepId": "click-confirm-and-open-account",
+      "action": "click",
+      "outcome": "skipped",
+      "durationMs": 0
+    }
+  ],
+  "recoveries": [],
+  "interventions": [
+    {
+      "kind": "irreversible_action",
+      "location": "click-confirm-and-open-account",
+      "reason": "Step \"click-confirm-and-open-account\" is classified irreversible and allowIrreversible was not set on this replay call; stopping before it is attempted.",
+      "url": "http://localhost:4000/members/10001/sub-account/review",
+      "decision": {
+        "signal": "performed"
+      },
+      "raisedAt": "2026-09-24T09:19:55.956Z",
+      "resumedAt": "2026-09-24T09:19:56.004Z",
+      "screenshotFile": "intervention-1.raw-page-content.png"
+    },
+    {
+      "kind": "irreversible_action",
+      "location": "click-confirm-and-open-account",
+      "reason": "Step \"click-confirm-and-open-account\" is irreversible; its action was sent and then a \"checkpoint_not_met\" condition occurred (a heading was present but did not start with \"Sub-Account Created\" (heading: [REDACTED:pii])). The effect may already have taken place. Escalating rather than assuming failure or retrying.",
+      "url": "http://localhost:4000/members/10001/sub-account/review",
+      "decision": {
+        "signal": "aborted"
+      },
+      "raisedAt": "2026-09-24T09:19:56.007Z",
+      "resumedAt": "2026-09-24T09:19:56.051Z",
+      "screenshotFile": "intervention-2.raw-page-content.png"
+    }
+  ],
+  "reason": "Step \"click-confirm-and-open-account\" is irreversible; its action was sent and then a \"checkpoint_not_met\" condition occurred (a heading was present but did not start with \"Sub-Account Created\" (heading: [REDACTED:pii])). The effect may already have taken place. Escalating rather than assuming failure or retrying. Operator aborted the run during handoff."
+}

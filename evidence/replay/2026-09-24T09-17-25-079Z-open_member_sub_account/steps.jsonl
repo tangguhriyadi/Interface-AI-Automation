@@ -1,0 +1,11 @@
+{"stepId":"type-username","action":"type","outcome":"ok","durationMs":11,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"teller"}
+{"stepId":"type-password","action":"type","outcome":"ok","durationMs":22,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:secret]"}
+{"stepId":"click-log-in","action":"click","outcome":"ok","durationMs":52,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"type-member-id","action":"type","outcome":"ok","durationMs":3,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:pii]"}
+{"stepId":"click-search","action":"click","outcome":"ok","durationMs":48,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-open-sub-account","action":"click","outcome":"ok","durationMs":52,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"select-account-type","action":"select","outcome":"ok","durationMs":4,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"Savings Club"}
+{"stepId":"type-initial-deposit","action":"type","outcome":"ok","durationMs":2,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"200"}
+{"stepId":"click-agree-terms","action":"click","outcome":"ok","durationMs":33,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-continue","action":"click","outcome":"ok","durationMs":49,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-confirm-and-open-account","action":"click","outcome":"skipped","durationMs":0,"recoveriesFired":[],"irreversibleExecutionAuthorized":false}

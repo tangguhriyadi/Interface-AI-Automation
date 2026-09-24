@@ -88,3 +88,25 @@ existence and exact name needed confirming, since discovery must never execute i
 | Signal | Observed |
 |---|---|
 | `role: "button", name: "Open Sub-Account"` | `button "Open Sub-Account"` — exact |
+
+## Correction (Phase 6, docs/plans/04-escalation-handoff-cli.md): the irreversible control was wrong
+
+The addendum above stopped at confirming the button exists, deliberately not clicking it
+to see what it actually does — reasonable caution at the time, but it meant the
+`irreversibleControls` declaration was never checked against the real flow. Phase 6's
+"author a genuine capability, not a contrived one" requirement meant actually driving the
+flow to completion (via automation's own `PlaywrightAdapter`, never by reading target-app's
+source), and that changed the picture:
+
+"Open Sub-Account" only navigates to a form (`GET /members/{id}/sub-account/new`) — no
+side effect. Filling it in and clicking "Continue" only navigates again, to a review page
+(`GET /members/{id}/sub-account/review`) — still no side effect, just a restatement of what
+would be created. The one click that actually creates anything is **"Confirm and Open
+Account"**, on that review page — see `open-member-sub-account-flow.aria.yaml` for all
+three pages, captured live.
+
+`irreversibleControls` has been corrected to declare `"Confirm and Open Account"` instead.
+Leaving `"Open Sub-Account"` classified irreversible would have been both wrong by
+CLAUDE.md's own definition (it isn't a business action, it's navigation) and overly
+restrictive — it would have refused discovery the chance to ever see this flow at all,
+rather than letting it explore right up to the genuine point of no return.

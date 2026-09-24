@@ -35,6 +35,17 @@ describe("capabilities/fake-credit-union-console.app-profile.json", () => {
     expect(profile.allowlist.originPattern).toBe("http://localhost:4000");
     expect(profile.allowlist.routePrefixes).toEqual(["/login", "/search", "/members"]);
   });
+
+  it("declares 'Confirm and Open Account' — not 'Open Sub-Account' — as the irreversible control", () => {
+    // Corrected during Phase 6's live exploration (docs/plans/04-escalation-handoff-cli.md):
+    // "Open Sub-Account" only navigates to a form (evidence/app-profile-verification/
+    // open-member-sub-account-flow.aria.yaml) — filling it in and clicking through to the
+    // review page has no side effect either. "Confirm and Open Account", on the review
+    // page, is the one click that actually creates the sub-account. Blocking the earlier
+    // button would have been both overly conservative (refusing harmless navigation) and,
+    // per CLAUDE.md's own definition, simply the wrong control.
+    expect(profile.irreversibleControls).toEqual([{ role: "button", name: "Confirm and Open Account", exact: true }]);
+  });
 });
 
 describe("capabilities/fake-credit-union-console.beta.tenant-overlay.json", () => {

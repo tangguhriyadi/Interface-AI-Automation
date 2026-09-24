@@ -65,7 +65,7 @@
   "irreversibleControls": [
     {
       "role": "button",
-      "name": "Open Sub-Account",
+      "name": "Confirm and Open Account",
       "exact": true
     }
   ],

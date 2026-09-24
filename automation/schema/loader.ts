@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { z } from "zod";
 import { AppProfileSchema, type AppProfile } from "./appProfile.js";
 import { CapabilityArtifactSchema, type CapabilityArtifact } from "./capability.js";
+import { DiscoveryGoalFileSchema, type DiscoveryGoalFile } from "./discoveryGoalFile.js";
 import { TenantOverlaySchema, type TenantOverlay } from "./tenantOverlay.js";
 
 function formatZodError(error: z.ZodError): string {
@@ -36,6 +37,10 @@ export function loadAppProfile(path: string): AppProfile {
 
 export function loadTenantOverlay(path: string): TenantOverlay {
   return loadAndValidate(path, TenantOverlaySchema, "tenant overlay");
+}
+
+export function loadDiscoveryGoalFile(path: string): DiscoveryGoalFile {
+  return loadAndValidate(path, DiscoveryGoalFileSchema, "discovery goal file");
 }
 
 /**
