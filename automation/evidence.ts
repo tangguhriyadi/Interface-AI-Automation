@@ -284,6 +284,11 @@ export async function writeReplayEvidence(
       outcome: s.outcome,
       matchedStrategy: s.matchedStrategy,
       durationMs: s.durationMs,
+      // Without these, a step an operator completed during a handoff reads identically to
+      // one automation ran itself — "ok" either way. The full detail already lives in
+      // `interventions`, but a reviewer scanning `steps` shouldn't have to cross-reference
+      // it just to see who did what.
+      ...(s.handledByOperator ? { handledByOperator: s.handledByOperator, operatorSignal: s.operatorSignal } : {}),
     })),
     recoveries: result.recoveries,
     interventions: interventionEntries,

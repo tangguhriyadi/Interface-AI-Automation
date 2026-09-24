@@ -30,8 +30,6 @@ import type { Sensitivity } from "./schema/capability.js";
  * repo."). Every other input must be given explicitly via `--input name=value`.
  */
 
-const CAPABILITIES_DIR = join(new URL(".", import.meta.url).pathname, "..", "capabilities");
-
 interface ParsedArgs {
   command: string;
   flags: Map<string, string | true>;
@@ -150,7 +148,12 @@ async function runDiscover(flags: Map<string, string | true>, providedInputs: Ma
     console.log(`Evidence written to ${written.dir}`);
 
     if (result.status === "done") {
-      const outPath = typeof flags.get("out") === "string" ? (flags.get("out") as string) : join(CAPABILITIES_DIR, `${goal.capabilityId}.artifact.json`);
+      // Defaults inside this run's own evidence directory, not into /capabilities — a
+      // demo run of `discover` should never leave an untracked file in the working tree
+      // for a reviewer to notice and wonder about. Pass --out explicitly to promote a
+      // discovered artifact into /capabilities once a human has actually reviewed it
+      // (approvalState stays "draft" either way — see automation/README.md).
+      const outPath = typeof flags.get("out") === "string" ? (flags.get("out") as string) : join(written.dir, "capability.artifact.json");
       await writeFile(outPath, `${JSON.stringify(result.capability, null, 2)}\n`, "utf-8");
       console.log(`discover: done — capability written to ${outPath}`);
     } else {

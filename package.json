@@ -5,14 +5,19 @@
   "description": "Command launcher only — delegates to /target-app and /automation, which are the two real npm projects. No code, no dependencies of its own.",
   "scripts": {
     "target-app:install": "npm --prefix target-app install",
+    "target-app:env": "cp -n target-app/.env.example target-app/.env",
     "target-app:dev": "npm --prefix target-app run dev",
     "target-app:build": "npm --prefix target-app run build",
     "target-app:test": "npm --prefix target-app run test",
     "automation:install": "npm --prefix automation install",
+    "automation:playwright:install": "npm --prefix automation exec -- playwright install chromium",
+    "automation:env": "cp -n automation/.env.example automation/.env",
     "automation:build": "npm --prefix automation run build",
     "automation:test": "npm --prefix automation run test",
     "automation:test:integration": "npm --prefix automation run test:integration",
     "build": "npm run target-app:build && npm run automation:build",
-    "test": "npm run target-app:test && npm run automation:test"
+    "test": "npm run target-app:test && npm run automation:test",
+    "discover": "node --env-file=automation/.env automation/node_modules/tsx/dist/cli.mjs automation/cli.ts discover",
+    "replay": "node --env-file=automation/.env automation/node_modules/tsx/dist/cli.mjs automation/cli.ts replay"
   }
 }

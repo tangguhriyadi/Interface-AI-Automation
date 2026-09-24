@@ -334,6 +334,57 @@ describe("writeReplayEvidence — intervention screenshots (Phase 4)", () => {
     const summary = JSON.parse(await readFile(written.summaryPath, "utf-8"));
     expect(summary.interventions).toEqual([]);
   });
+
+  it("surfaces handledByOperator/operatorSignal directly on the step line — a reviewer shouldn't have to cross-reference interventions just to see who did what", async () => {
+    const result: ReplayResult = {
+      status: "success",
+      outputs: {},
+      steps: [
+        {
+          stepId: "click-confirm-and-open-account",
+          action: "click",
+          outcome: "ok",
+          durationMs: 0,
+          recoveriesFired: [],
+          irreversibleExecutionAuthorized: true,
+          handledByOperator: true,
+          operatorSignal: "performed",
+        },
+      ],
+      recoveries: [],
+      durationMs: 5,
+      interventions: [buildIntervention()],
+    };
+    const adapter = new FakeAdapter();
+    const written = await writeReplayEvidence(capability, inputs, result, adapter, { baseDir });
+
+    const summary = JSON.parse(await readFile(written.summaryPath, "utf-8"));
+    expect(summary.steps[0]).toMatchObject({
+      stepId: "click-confirm-and-open-account",
+      outcome: "ok",
+      handledByOperator: true,
+      operatorSignal: "performed",
+    });
+  });
+
+  it("omits handledByOperator/operatorSignal entirely for a step automation ran itself — no false 'ok, but who did it?' ambiguity", async () => {
+    const result: ReplayResult = {
+      status: "success",
+      outputs: {},
+      steps: [
+        { stepId: "click-search", action: "click", outcome: "ok", durationMs: 12, recoveriesFired: [], matchedStrategy: "role" },
+      ],
+      recoveries: [],
+      durationMs: 5,
+      interventions: [],
+    };
+    const adapter = new FakeAdapter();
+    const written = await writeReplayEvidence(capability, inputs, result, adapter, { baseDir });
+
+    const summary = JSON.parse(await readFile(written.summaryPath, "utf-8"));
+    expect(summary.steps[0]).not.toHaveProperty("handledByOperator");
+    expect(summary.steps[0]).not.toHaveProperty("operatorSignal");
+  });
 });
 
 describe("writeDiscoveryEvidence", () => {

@@ -6,11 +6,12 @@ LLM-driven discovery loop that emits new capability artifacts by actually
 driving the app. This project has no knowledge of `/target-app` beyond its
 rendered UI — see "The hard boundary" in the repo root `CLAUDE.md`.
 
-Not yet included (a later plan): the escalation/handoff mechanism (a human
-taking control of the *same live session* discovery paused, not a fresh one)
-and the `discover`/`replay` CLI. Right now this project is a library,
-exercised directly from its test suite and, for live runs, from short scripts
-— see "Running discovery" below.
+Also included: the escalation/handoff mechanism (a human taking control of
+the *same live session* automation paused, not a fresh one — `escalation.ts`,
+`consoleEscalationHandler.ts`) and a `discover`/`replay` CLI (`cli.ts`). The
+root `README.md` is the exact demo path — start there. This file goes
+deeper on `/automation` itself: its file map, result contracts, and what
+discovery does and doesn't reproduce on its own without a human.
 
 ## Setup
 
@@ -93,35 +94,10 @@ port target-app happens to be listening on — a mismatch fails with a clear
 
 ## Running discovery
 
-There's no `discover` CLI yet (a later plan). A live discovery run is driven
-from a short script, the same pattern used to validate every piece of this
-project live before it was called done — see `discovery/discover.ts`'s own
-doc comment and `docs/plans/03-discovery-loop.md`'s Phase 7 for the exact
-shape. Sketch:
-
-```ts
-import { PlaywrightAdapter } from "./adapter/playwrightAdapter.js";
-import { AnthropicModel } from "./discovery/model.js";
-import { discover, type DiscoveryGoal } from "./discovery/discover.js";
-import { writeDiscoveryEvidence } from "./evidence.js";
-import { loadAppProfile } from "./schema/loader.js";
-
-const appProfile = loadAppProfile("../capabilities/fake-credit-union-console.app-profile.json");
-const goal: DiscoveryGoal = {
-  capabilityId: "...", version: "1.0.0", appId: "fake-credit-union-console",
-  description: "...", entryPoint: "/login",
-  inputs: { /* name -> { value, sensitivity } — literal values, known only here */ },
-  outputs: { /* name -> { sensitivity } */ },
-};
-
-const adapter = await PlaywrightAdapter.launch(process.env.TARGET_APP_BASE_URL!);
-const result = await discover(goal, appProfile, adapter, new AnthropicModel());
-await writeDiscoveryEvidence(goal, result, adapter); // always, regardless of outcome
-await adapter.close();
-```
-
-`result.status` is one of `done | business_outcome | session_expired |
-allowlist_violation | http_error | max_steps | timeout | dead_end |
+`cli.ts` is the real entry point now — see the repo root `README.md`'s "Demo
+path" for the exact invocation (`npm run discover -- ...` from the repo
+root). `result.status` is one of `done | business_outcome | session_expired
+| allowlist_violation | http_error | max_steps | timeout | dead_end |
 escalated` — see `discovery/discover.ts`'s `DiscoveryResult` type for what
 each carries. Only `done` produces a capability artifact, and it always has
 `approvalState: "draft"` — see below.
@@ -145,8 +121,14 @@ one:
   default: an app profile that hasn't been reviewed for irreversible
   controls declares none, rather than silently guessing. Authoring one means
   driving the running app and deciding, as a human, which controls belong
-  here — see `evidence/app-profile-verification/irreversible-control-open-sub-account.aria.yaml`
-  for a worked example.
+  here — and getting it wrong is a real risk worth showing, not just
+  claiming: an earlier pass declared `"Open Sub-Account"` irreversible from
+  confirming the button existed alone, without ever driving the flow behind
+  it. It turned out to just be navigation to a form — nothing is created
+  until a later "Confirm and Open Account" click, three pages in. Corrected
+  after actually driving the full flow live — see
+  `evidence/app-profile-verification/open-member-sub-account-flow.aria.yaml`
+  and that directory's `findings.md` for the full correction.
 - **`approvalState`** (`CapabilityArtifactSchema`) — `"draft"` or
   `"approved"`, defaulting to `"draft"`. Discovery always emits `draft`,
   unconditionally, by construction — nothing in this codebase can produce an
@@ -197,7 +179,8 @@ schema/            Zod schemas — the artifact format, validated at load time
   frame.ts             structured frame reference (by title/name/url), not a raw selector
   appProfile.ts        per-appId: outcome detectors, recovery rules, allowlist, sessionExpiry signal
   tenantOverlay.ts      baseUrl + control-name overrides for a specific tenant
-  loader.ts            load + validate a capability/app-profile/tenant-overlay from disk
+  discoveryGoalFile.ts  on-disk discover() goal shape — name + sensitivity per input, never a literal value
+  loader.ts            load + validate a capability/app-profile/tenant-overlay/goal-file from disk
 
 adapter/            The only place Playwright is imported
   surfaceAdapter.ts    the SurfaceAdapter interface + LocatorResolutionError
@@ -229,7 +212,17 @@ discovery/           The LLM-driven observe -> decide -> act loop — no model l
 
 evidence.ts          writeReplayEvidence() / writeDiscoveryEvidence() — steps.jsonl + a human-readable
                         summary.json under evidence/<replay|discovery>/, resolved relative to the repo
-                        root regardless of cwd; screenshot only on a non-success outcome
+                        root regardless of cwd; screenshot only on a non-success outcome; one
+                        `.raw-page-content.png` file per intervention plus the run's own
+
+escalation.ts        The human-in-the-loop handoff: ControlOwner state, createControlGate()
+                        (enforces who may touch the adapter, not just implied by await), the
+                        closed-set InterventionSignal/isValidDecisionFor(), InterventionRequest/Record
+consoleEscalationHandler.ts  The minimal real operator surface: a terminal prompt on real stdin/stdout,
+                        fails fast (NonInteractiveEscalationError) when stdin isn't a TTY instead of
+                        hanging, reprompts on an answer outside the request's valid closed set
+
+cli.ts                The `discover`/`replay` CLI — see the repo root README's "Demo path"
 
 test/
   schema/, adapter/, executor/, discovery/   fast unit suite (FakeAdapter/FakeModel, no browser, no
