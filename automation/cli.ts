@@ -155,9 +155,9 @@ async function runDiscover(flags: Map<string, string | true>, providedInputs: Ma
       // (approvalState stays "draft" either way — see automation/README.md).
       const outPath = typeof flags.get("out") === "string" ? (flags.get("out") as string) : join(written.dir, "capability.artifact.json");
       await writeFile(outPath, `${JSON.stringify(result.capability, null, 2)}\n`, "utf-8");
-      console.log(`discover: done — capability written to ${outPath}`);
+      console.log(`discover: done, capability written to ${outPath}`);
     } else {
-      console.log(`discover: ${result.status}${"reason" in result ? ` — ${result.reason}` : ""}`);
+      console.log(`discover: ${result.status}${"reason" in result ? `: ${result.reason}` : ""}`);
     }
   } finally {
     await adapter.close();
@@ -189,7 +189,7 @@ async function runReplay(flags: Map<string, string | true>, providedInputs: Map<
 
     const written = await writeReplayEvidence(capability, inputs, result, adapter);
     console.log(`Evidence written to ${written.dir}`);
-    console.log(`replay: ${result.status}${"reason" in result ? ` — ${result.reason}` : ""}`);
+    console.log(`replay: ${result.status}${"reason" in result ? `: ${result.reason}` : ""}`);
     if (result.status !== "success" && result.status !== "business_outcome") {
       process.exitCode = 1;
     }

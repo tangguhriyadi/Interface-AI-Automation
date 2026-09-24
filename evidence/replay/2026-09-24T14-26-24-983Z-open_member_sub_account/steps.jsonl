@@ -1,0 +1,12 @@
+{"stepId":"type-username","action":"type","outcome":"ok","durationMs":11,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"teller"}
+{"stepId":"type-password","action":"type","outcome":"ok","durationMs":6,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:secret]"}
+{"stepId":"click-log-in","action":"click","outcome":"ok","durationMs":50,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"type-member-id","action":"type","outcome":"ok","durationMs":4,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"[REDACTED:pii]"}
+{"stepId":"click-search","action":"click","outcome":"ok","durationMs":57,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-open-sub-account","action":"click","outcome":"ok","durationMs":42,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"select-account-type","action":"select","outcome":"ok","durationMs":12,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"money-market"}
+{"stepId":"type-initial-deposit","action":"type","outcome":"ok","durationMs":3,"recoveriesFired":[],"matchedStrategy":"role","attemptedValue":"500"}
+{"stepId":"click-agree-terms","action":"click","outcome":"ok","durationMs":38,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-continue","action":"click","outcome":"ok","durationMs":50,"recoveriesFired":[],"matchedStrategy":"role"}
+{"stepId":"click-confirm-and-open-account","action":"click","outcome":"ok","durationMs":0,"recoveriesFired":[],"irreversibleExecutionAuthorized":true,"handledByOperator":true,"operatorSignal":"performed"}
+{"record":"intervention","kind":"irreversible_action","location":"click-confirm-and-open-account","reason":"Step \"click-confirm-and-open-account\" is classified irreversible and allowIrreversible was not set on this replay call; stopping before it is attempted.","url":"http://localhost:4000/members/10001/sub-account/review","decision":{"signal":"performed"},"raisedAt":"2026-09-24T14:26:18.020Z","resumedAt":"2026-09-24T14:26:24.957Z","screenshotFile":"intervention-1.raw-page-content.png"}

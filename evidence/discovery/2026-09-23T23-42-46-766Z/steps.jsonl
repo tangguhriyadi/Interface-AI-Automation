@@ -1,8 +1,0 @@
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"username\" into ref \"12\" in frame \"main\""}
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"password\" into ref \"16\" in frame \"main\""}
-{"toolName":"click","outcome":"executed","detail":"clicked ref \"17\" in frame \"main\""}
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"memberId\" into ref \"12\" in frame \"main\""}
-{"toolName":"click","outcome":"executed","detail":"clicked ref \"13\" in frame \"main\""}
-{"toolName":"read","outcome":"executed","detail":"read into \"memberName\": [REDACTED:pii]"}
-{"toolName":"read","outcome":"refused","detail":"refused: no frame \"iframe:Account Balance: title=\"Account Balance\"\" in the current snapshot"}
-{"toolName":"read","outcome":"executed","detail":"read into \"savingsBalance\": [REDACTED:pii]"}

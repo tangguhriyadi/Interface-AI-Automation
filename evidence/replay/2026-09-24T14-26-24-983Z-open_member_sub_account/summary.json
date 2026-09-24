@@ -3,8 +3,8 @@
   "capabilityId": "open_member_sub_account",
   "version": "1.0.0",
   "appId": "fake-credit-union-console",
-  "writtenAt": "2026-09-24T09:28:15.640Z",
-  "durationMs": 30550,
+  "writtenAt": "2026-09-24T14:26:24.983Z",
+  "durationMs": 10050,
   "status": "success",
   "inputs": {
     "username": {
@@ -25,7 +25,7 @@
     },
     "initialDeposit": {
       "sensitivity": "none",
-      "value": "500.00"
+      "value": "500"
     }
   },
   "stepCount": 11,
@@ -35,49 +35,49 @@
       "action": "type",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 12
+      "durationMs": 11
     },
     {
       "stepId": "type-password",
       "action": "type",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 5
+      "durationMs": 6
     },
     {
       "stepId": "click-log-in",
       "action": "click",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 54
+      "durationMs": 50
     },
     {
       "stepId": "type-member-id",
       "action": "type",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 5
+      "durationMs": 4
     },
     {
       "stepId": "click-search",
       "action": "click",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 69
+      "durationMs": 57
     },
     {
       "stepId": "click-open-sub-account",
       "action": "click",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 41
+      "durationMs": 42
     },
     {
       "stepId": "select-account-type",
       "action": "select",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 6
+      "durationMs": 12
     },
     {
       "stepId": "type-initial-deposit",
@@ -91,20 +91,22 @@
       "action": "click",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 26
+      "durationMs": 38
     },
     {
       "stepId": "click-continue",
       "action": "click",
       "outcome": "ok",
       "matchedStrategy": "role",
-      "durationMs": 51
+      "durationMs": 50
     },
     {
       "stepId": "click-confirm-and-open-account",
       "action": "click",
       "outcome": "ok",
-      "durationMs": 0
+      "durationMs": 0,
+      "handledByOperator": true,
+      "operatorSignal": "performed"
     }
   ],
   "recoveries": [],
@@ -117,8 +119,8 @@
       "decision": {
         "signal": "performed"
       },
-      "raisedAt": "2026-09-24T09:27:48.177Z",
-      "resumedAt": "2026-09-24T09:28:15.606Z",
+      "raisedAt": "2026-09-24T14:26:18.020Z",
+      "resumedAt": "2026-09-24T14:26:24.957Z",
       "screenshotFile": "intervention-1.raw-page-content.png"
     }
   ],

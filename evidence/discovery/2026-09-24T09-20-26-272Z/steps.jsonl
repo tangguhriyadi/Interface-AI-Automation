@@ -1,9 +1,0 @@
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"username\" into ref \"12\" in frame \"main\""}
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"password\" into ref \"16\" in frame \"main\""}
-{"toolName":"click","outcome":"executed","detail":"clicked ref \"17\" in frame \"main\""}
-{"toolName":"type","outcome":"executed","detail":"typed the declared input \"memberId\" into ref \"12\" in frame \"main\""}
-{"toolName":"click","outcome":"executed","detail":"clicked ref \"13\" in frame \"main\""}
-{"toolName":"read","outcome":"executed","detail":"read into \"memberName\": [REDACTED:pii]"}
-{"toolName":"read","outcome":"executed","detail":"read into \"savingsBalance\": [REDACTED:pii]"}
-{"toolName":"done","outcome":"refused","detail":"refused: The derived checkpoint text would contain a secret/pii value already known this run — point at a different, more stable ref instead."}
-{"toolName":"done","outcome":"executed","detail":"goal complete"}

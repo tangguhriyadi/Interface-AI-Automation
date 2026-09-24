@@ -21,7 +21,7 @@ polished subset.
 - Playwright as the driver.
 - Anthropic API for discovery. Model configurable via env, default
   `claude-sonnet-5`. The API key lives only in `.env`, never in code or logs.
-- Zod for artifact schemas — the schema is validated at load time, not assumed.
+- Zod for artifact schemas: the schema is validated at load time, not assumed.
 - Vitest for tests.
 - One CLI with two commands: `discover` and `replay`.
 
@@ -43,7 +43,7 @@ infrastructure is explicitly not rewarded. Simpler is better if justified.
 `package.json`. No workspaces.
 
 `/target-app` is finished and tested. Do not modify it while building `/automation`
-unless I explicitly ask — if `/automation` seems to need a change there, stop and
+unless I explicitly ask; if `/automation` seems to need a change there, stop and
 say so.
 
 `/REPORT.md` headings are fixed and must appear exactly: Architecture,
@@ -55,7 +55,7 @@ Escalation & handoff, Safety, Cuts.
 `/automation/` must never import from, read the source of, or query the internals of
 `/target-app/`. No shared types, no shared fixtures, no reading its JSON data,
 no hitting its routes with plain HTTP to shortcut the UI. The target app is a
-black box that happens to live in the same repo — it stands in for a bank
+black box that happens to live in the same repo; it stands in for a bank
 application whose code we would never have.
 
 The only permitted coupling is through the rendered UI, plus environment
@@ -68,7 +68,7 @@ If a task seems to require crossing this line, the design is wrong. Say so.
 
 The agent perceives through the **accessibility tree**, not raw HTML. It reads
 controls as role + accessible name + value. Screenshots are captured as
-evidence and as escalation context — never as the basis for deciding an action,
+evidence and as escalation context, never as the basis for deciding an action,
 and never as pixel coordinates to click.
 
 This is deliberate: role/name targeting replays deterministically, and the same
@@ -91,7 +91,7 @@ Locators are stored as a chain, tried in order at replay:
 1. role + accessible name
 2. label text
 3. structural position (e.g. row whose row header matches)
-4. CSS/XPath — last resort, must be flagged `brittle: true`
+4. CSS/XPath: last resort, must be flagged `brittle: true`
 
 Every locator chain carries a `rationale` string explaining the choice.
 
@@ -122,12 +122,12 @@ the rule that keeps artifacts decoupled from the model transcript.
 Replay returns a discriminated union. Conflating these is the single most
 common design mistake in this problem, so keep them strictly separate:
 
-- `success` — goal reached, declared outputs returned.
-- `business_outcome` — a legitimate answer the caller needs (`member_not_found`,
+- `success`: goal reached, declared outputs returned.
+- `business_outcome`: a legitimate answer the caller needs (`member_not_found`,
   `access_denied`). Declared ahead of time. NOT an error, never thrown, never
   logged as a failure.
-- `escalated` — cannot safely proceed; an intervention request was raised.
-- `failed` — hard failure with step id, locator used, expected vs observed,
+- `escalated`: cannot safely proceed; an intervention request was raised.
+- `failed`: hard failure with step id, locator used, expected vs observed,
   and an error class.
 
 Recoverable conditions (dismissable interstitial, transient slow load) are
@@ -139,9 +139,9 @@ were detected rather than accidentally skipped.
 
 - `schemaVersion` and a capability `version` are mandatory.
 - Steps reference inputs by name. Never bake a literal runtime value into an
-  artifact — it breaks parameterisation and persists PII.
+  artifact; it breaks parameterisation and persists PII.
 - Checkpoints are conditions, not text snapshots. "Heading starts with
-  `Member:`" or "frame named `Account Balance` is present" — never "heading
+  `Member:`" or "frame named `Account Balance` is present", never "heading
   equals `Member: Elena Cho`". A literal checkpoint breaks the next input and
   stores PII.
 - Every artifact declares a `successCheckpoint`. Never assume a click worked.
@@ -155,10 +155,10 @@ the same everywhere in the app. They live in an **app profile** per `appId`,
 authored and reviewed by a human. A capability references the outcomes that
 apply to it rather than redeclaring them.
 
-- Recovery rules are global and checked at every transition — an interstitial
+- Recovery rules are global and checked at every transition: an interstitial
   can appear anywhere.
 - Outcome detection must not rely on one signal. Match heading, visible text,
-  and `role="alert"` where present, but never assume `role="alert"` exists —
+  and `role="alert"` where present, but never assume `role="alert"` exists;
   real legacy apps often render errors as plain text.
 - The same condition can appear in different shapes in one app (a full page
   titled "Invalid Input" vs an inline alert on the search page). Detectors
@@ -181,7 +181,7 @@ re-recorded per tenant.
   page" as "nothing happened". Escalate with evidence.
 - Never persist credentials, tokens, session cookies, or full PII into
   artifacts, logs, or evidence. Redact at the point of capture, not
-  afterwards. This includes page titles and headings — they often contain
+  afterwards. This includes page titles and headings; they often contain
   member names.
 - Minimise what reaches the model: redact sensitive values from the snapshot
   sent during discovery unless the task cannot be completed without them.
@@ -195,7 +195,7 @@ A human takes control of **the same live session**, not a fresh one. The
 automation pauses, cedes control, the human acts, control is handed back, and
 the run resumes. Who holds control is always explicit state.
 
-The operator console may be minimal or mocked — the handoff mechanism and the
+The operator console may be minimal or mocked; the handoff mechanism and the
 control-transfer model must be real. Record what the human did as evidence.
 
 ## Working style
