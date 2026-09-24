@@ -1,5 +1,4 @@
 .env
-docs/plans/
 PRPs/
 
 # Claude Code local state (machine-specific)
