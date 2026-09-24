@@ -201,9 +201,10 @@ control-transfer model must be real. Record what the human did as evidence.
 ## Working style
 
 - `/plan` first. I review and edit the plan before implementation starts.
-- Implement phase by phase and stop after each phase for review.
-- Then `tdd-workflow`: failing test first, then implement.
-- Then `/code-review` from fresh context.
+- Implement phase by phase and stop after each phase for my review.
+- Tests are written alongside the implementation in the same phase, not
+  test-first.
+- Review is me reading the diff, not a separate code-review agent.
 - Test where it counts: the artifact schema, the replay executor, the error
   taxonomy, the policy gate, redaction. Do not chase a coverage percentage.
 - Keep functions readable over clever. I have to defend every line in an
