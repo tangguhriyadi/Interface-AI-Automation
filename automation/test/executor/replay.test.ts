@@ -20,8 +20,15 @@ const baseCapability: CapabilityArtifact = {
   inputs: {},
   outputs: { value: { type: "string", sensitivity: "none" } },
   steps: [
-    { id: "click-go", action: "click", classification: "safe", target: [role("button", "Go")] },
-    { id: "read-value", action: "read", classification: "safe", target: [role("cell", "Value")], outputName: "value" },
+    { id: "click-go", action: "click", classification: "safe", continuesAfterSkip: false, target: [role("button", "Go")] },
+    {
+      id: "read-value",
+      action: "read",
+      classification: "safe",
+      continuesAfterSkip: false,
+      target: [role("cell", "Value")],
+      outputName: "value",
+    },
   ],
   successCheckpoint: { kind: "heading_starts_with", text: "Detail" },
   businessOutcomes: ["not_found"],
@@ -86,6 +93,7 @@ describe("replay — per-step checkpoint (independent of the final successCheckp
         id: "click-go",
         action: "click",
         classification: "safe",
+        continuesAfterSkip: false,
         target: [role("button", "Go")],
         checkpoint: { kind: "heading_starts_with", text: "Member:" },
       },
@@ -266,7 +274,14 @@ describe("replay — session expiry", () => {
       ...baseCapability,
       inputs: { note: { type: "string", sensitivity: "none" } },
       steps: [
-        { id: "type-note", action: "type", classification: "safe", target: [role("textbox", "Note")], value: { fromInput: "note" } },
+        {
+          id: "type-note",
+          action: "type",
+          classification: "safe",
+          continuesAfterSkip: false,
+          target: [role("textbox", "Note")],
+          value: { fromInput: "note" },
+        },
         baseCapability.steps[1]!,
       ],
     };
@@ -333,7 +348,13 @@ describe("replay — irreversible steps (opt-in gate)", () => {
     ...baseCapability,
     steps: [
       baseCapability.steps[0]!, // click-go (safe) — leaves entryPoint
-      { id: "open-account", action: "click", classification: "irreversible", target: [role("button", "Open Account")] },
+      {
+        id: "open-account",
+        action: "click",
+        classification: "irreversible",
+        continuesAfterSkip: false,
+        target: [role("button", "Open Account")],
+      },
       baseCapability.steps[1]!, // read-value (last)
     ],
   };
@@ -432,8 +453,22 @@ describe("replay — redaction", () => {
       note: { type: "string", sensitivity: "none" },
     },
     steps: [
-      { id: "type-password", action: "type", classification: "safe", target: [role("textbox", "Password")], value: { fromInput: "password" } },
-      { id: "type-note", action: "type", classification: "safe", target: [role("textbox", "Note")], value: { fromInput: "note" } },
+      {
+        id: "type-password",
+        action: "type",
+        classification: "safe",
+        continuesAfterSkip: false,
+        target: [role("textbox", "Password")],
+        value: { fromInput: "password" },
+      },
+      {
+        id: "type-note",
+        action: "type",
+        classification: "safe",
+        continuesAfterSkip: false,
+        target: [role("textbox", "Note")],
+        value: { fromInput: "note" },
+      },
       baseCapability.steps[1]!,
     ],
   };

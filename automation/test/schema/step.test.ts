@@ -134,4 +134,31 @@ describe("StepSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("defaults continuesAfterSkip to false when omitted", () => {
+    const result = StepSchema.safeParse({
+      id: "open-account",
+      action: "click",
+      classification: "irreversible",
+      target: roleTarget,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.continuesAfterSkip).toBe(false);
+    }
+  });
+
+  it("accepts an explicit continuesAfterSkip: true", () => {
+    const result = StepSchema.safeParse({
+      id: "open-account",
+      action: "click",
+      classification: "irreversible",
+      target: roleTarget,
+      continuesAfterSkip: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.continuesAfterSkip).toBe(true);
+    }
+  });
 });

@@ -528,6 +528,7 @@ export async function discover(
           id: nextStepId("click"),
           action: "click",
           classification: "safe",
+          continuesAfterSkip: false,
           target: gate.locator,
           ...frameField,
         });
@@ -573,6 +574,7 @@ export async function discover(
           id: nextStepId(call.tool),
           action: call.tool,
           classification: "safe",
+          continuesAfterSkip: false,
           target: gate.locator,
           value: { fromInput: inputName },
           ...frameField,
@@ -619,6 +621,7 @@ export async function discover(
         id: nextStepId("read"),
         action: "read",
         classification: "safe",
+        continuesAfterSkip: false,
         target: gate.locator,
         outputName,
         ...frameField,

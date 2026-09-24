@@ -43,6 +43,19 @@ const baseStepFields = {
    * `successCheckpoint`; evaluated by the same `evaluateCheckpoint`.
    */
   checkpoint: CheckpointSchema.optional(),
+  /**
+   * Declares that later steps in this capability do NOT depend on this
+   * step's effect having happened — required before an escalation-handoff
+   * `skipped` signal is allowed to let replay continue past this step.
+   * Defaults to `false`: without a step-dependency graph anywhere in this
+   * schema, "is it safe to skip" can't be inferred, only declared by a
+   * human who has reviewed the capability, the same conservative-default
+   * pattern `allowIrreversible` already uses. Only meaningful on a step
+   * classified `irreversible` with steps after it — the last step in a
+   * capability is always safe to skip regardless, since nothing could
+   * depend on it.
+   */
+  continuesAfterSkip: z.boolean().default(false),
 };
 
 export const ClickStepSchema = z.object({
