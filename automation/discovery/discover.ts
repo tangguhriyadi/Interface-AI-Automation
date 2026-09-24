@@ -1,6 +1,14 @@
 import { evaluateCheckpoint } from "../adapter/matchers.js";
 import { findByRef, frameRefFor, resolveRef, type Snapshot, type SnapshotNode } from "../adapter/snapshotParser.js";
 import { LocatorResolutionError, type SurfaceAdapter } from "../adapter/surfaceAdapter.js";
+import {
+  createControlGate,
+  isValidDecisionFor,
+  type EscalationHandler,
+  type InterventionKind,
+  type InterventionRecord,
+  type InterventionRequest,
+} from "../escalation.js";
 import { createAppDetector } from "../executor/appDetection.js";
 import { isIrreversibleControl, isWithinAllowlist } from "../executor/policy.js";
 import { redactForLog } from "../executor/redact.js";
@@ -36,6 +44,16 @@ export interface DiscoverOptions {
   timeoutMs?: number;
   /** Consecutive structurally-unchanged iterations before stopping with `dead_end`. */
   deadEndThreshold?: number;
+  /**
+   * When set, an escalation pauses instead of ending the run — same control-transfer
+   * model as `replay()`'s own `onEscalation` (see `escalation.ts`'s doc comment for the
+   * production-scale seam this implies). Discovery's verification is honestly weaker
+   * than replay's, though: there's no per-action declared checkpoint to check a
+   * `performed`/`skipped`/`resolved` signal against, only a fresh re-observation handed
+   * to the model's own next turn to judge — see `attemptHandoff` below. Unset (the
+   * default) preserves today's exact behavior: an escalation ends the run immediately.
+   */
+  onEscalation?: EscalationHandler;
 }
 
 export interface DiscoveryTurnLogEntry {
@@ -62,6 +80,8 @@ interface DiscoveryResultCommon {
    * `ReplayResult.success.outputs` already exposing raw values.
    */
   knownSensitiveValues: readonly string[];
+  /** Every escalation handoff cycle this run went through, in order — raised whether or not it ultimately resumed, so evidence shows exactly when control was ceded and returned. Empty unless `onEscalation` was configured. */
+  interventions: InterventionRecord[];
 }
 
 type DiscoveryResultShape =
@@ -264,8 +284,12 @@ export async function discover(
   const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadEndThreshold = options.deadEndThreshold ?? DEFAULT_DEAD_END_THRESHOLD;
+  // Every adapter operation this function performs — including the recovery loop's own
+  // dismiss clicks inside createAppDetector — goes through the gate, so control ownership
+  // is enforced everywhere, not just at the call sites this function writes directly.
+  const controlGate = createControlGate(adapter);
 
-  await adapter.goto(goal.entryPoint);
+  await controlGate.adapter.goto(goal.entryPoint);
 
   const startedAt = Date.now();
   const steps: Step[] = [];
@@ -275,7 +299,8 @@ export async function discover(
   const redactedRefs = new Set<string>();
   const knownValues: KnownValue[] = [];
   const recoveriesSeen = new Set<string>();
-  const appDetector = createAppDetector(appProfile, adapter);
+  const interventions: InterventionRecord[] = [];
+  const appDetector = createAppDetector(appProfile, controlGate.adapter);
   const allOutcomeNames = Object.keys(appProfile.outcomes);
   // No tenant-overlay concept in discovery (out of scope) — the app profile's own
   // originPattern is always the authoritative allowlist origin here, unlike replay()
@@ -302,12 +327,77 @@ export async function discover(
       recoveries: [...recoveriesSeen],
       durationMs: Date.now() - startedAt,
       knownSensitiveValues: valuesOfSensitivity(knownValues, ["secret", "pii"]),
+      interventions: [...interventions],
     } as DiscoveryResult;
   }
 
   function nextStepId(action: string): string {
     stepCounter += 1;
     return `${action}-${stepCounter}`;
+  }
+
+  /**
+   * Shared by all three of discover()'s escalation points. Captures URL/screenshot
+   * *before* ceding control (the gated adapter refuses `screenshot()`/`snapshot()` once
+   * ceded), hands the request to `options.onEscalation` through `controlGate.withOperatorControl`
+   * (so control can't get stuck on "operator" even if the handler throws), then acts on
+   * the closed-set decision:
+   *
+   * - `aborted`, or a signal invalid for `kind` → the run ends now.
+   * - any valid signal otherwise (`resolved`, or `performed`/`skipped` for an
+   *   `action_refused_irreversible` escalation) → resumes. Unlike `replay()`, there is no
+   *   per-action declared checkpoint to verify a `performed`/`skipped` signal against —
+   *   discovery is exploring, not executing a fixed script — so nothing here re-checks
+   *   anything. The loop just re-observes on its next iteration and, for the `escalate`
+   *   call site, hands the model a plain note that a human resolved the escalation,
+   *   leaving it to the model's own next turn to judge whether its intended action
+   *   visibly succeeded. This asymmetry with replay's real verification is deliberate,
+   *   not an oversight (design decision 6, docs/plans/04-escalation-handoff-cli.md) — and
+   *   it's why repeated escalations aren't specially bounded here the way replay's
+   *   `MAX_INTERVENTION_CYCLES` bounds them: a handoff that doesn't actually fix anything
+   *   just re-triggers the same detection next iteration, and the loop's own existing
+   *   `maxSteps`/`timeoutMs` bound that exactly like any other non-progress.
+   */
+  async function attemptHandoff(params: {
+    kind: InterventionKind;
+    reason: string;
+    location: string;
+  }): Promise<{ outcome: "resumed"; signal: "performed" | "skipped" | "resolved" } | { outcome: "terminal"; reason: string }> {
+    const handler = options.onEscalation;
+    if (!handler) {
+      return { outcome: "terminal", reason: params.reason };
+    }
+
+    const raisedAt = new Date().toISOString();
+    // Captured before ceding control — the gated adapter refuses these once ceded.
+    const currentSnapshot = await controlGate.adapter.snapshot();
+    const mainFrame = currentSnapshot.frames.find((f) => f.frameId === "main");
+    const screenshot = await controlGate.adapter.screenshot();
+
+    const request: InterventionRequest = {
+      kind: params.kind,
+      runKind: "discovery",
+      subject: goal.description,
+      location: params.location,
+      reason: params.reason,
+      url: mainFrame?.url,
+      screenshot,
+    };
+
+    const decision = await controlGate.withOperatorControl(handler, request);
+    const resumedAt = new Date().toISOString();
+    interventions.push({ request, decision, raisedAt, resumedAt });
+
+    if (!isValidDecisionFor(params.kind, decision.signal)) {
+      return {
+        outcome: "terminal",
+        reason: `${params.reason} Operator gave signal "${decision.signal}", which is not valid for this escalation; ending the run rather than guessing intent.`,
+      };
+    }
+    if (decision.signal === "aborted") {
+      return { outcome: "terminal", reason: `${params.reason} Operator aborted the run during handoff.` };
+    }
+    return { outcome: "resumed", signal: decision.signal };
   }
 
   /** Resolves frameId+ref to its node and applies the irreversible-control policy gate — shared by click/type/select. Returns a refusal reason, or the resolved node + locator chain to proceed with. */
@@ -356,12 +446,12 @@ export async function discover(
     }
 
     // Hard failure, checked before any page content is read — same as replay().
-    const navigationStatus = adapter.lastNavigationStatus();
+    const navigationStatus = controlGate.adapter.lastNavigationStatus();
     if (navigationStatus !== undefined && navigationStatus >= 500) {
       return finalize({ status: "http_error", httpStatus: navigationStatus });
     }
 
-    const rawSnapshot = await adapter.snapshot();
+    const rawSnapshot = await controlGate.adapter.snapshot();
     const mainFrame = rawSnapshot.frames.find((f) => f.frameId === "main");
 
     // Discovery needs this even more than replay does: replay runs a fixed, human-reviewed
@@ -395,16 +485,20 @@ export async function discover(
       return finalize({ status: "session_expired" });
     }
     if (detection.kind === "recovery_exhausted") {
-      return finalize({
-        status: "escalated",
-        reason: `Recovery "${detection.ruleName}" fired repeatedly without clearing the condition — cannot safely proceed unattended.`,
-      });
+      const reason = `Recovery "${detection.ruleName}" fired repeatedly without clearing the condition — cannot safely proceed unattended.`;
+      const handoff = await attemptHandoff({ kind: "other", reason, location: `turn ${iteration}` });
+      if (handoff.outcome === "terminal") {
+        return finalize({ status: "escalated", reason: handoff.reason });
+      }
+      continue; // re-observe next iteration — no per-action checkpoint to verify a recovery-condition handoff against
     }
     if (detection.kind === "recovery_action_failed") {
-      return finalize({
-        status: "escalated",
-        reason: `Recovery "${detection.ruleName}"'s dismiss action did not resolve — cannot safely proceed unattended.`,
-      });
+      const reason = `Recovery "${detection.ruleName}"'s dismiss action did not resolve — cannot safely proceed unattended.`;
+      const handoff = await attemptHandoff({ kind: "other", reason, location: `turn ${iteration}` });
+      if (handoff.outcome === "terminal") {
+        return finalize({ status: "escalated", reason: handoff.reason });
+      }
+      continue;
     }
 
     // detection.kind === "settled" — this is the snapshot the model actually sees.
@@ -476,7 +570,21 @@ export async function discover(
       const lastEntry = modelHistory[modelHistory.length - 1];
       const reason = composeEscalationReason(call.args.reasonCode, modelHistory.length, mainFrame?.url, lastEntry);
       turnLog.push({ toolName: "escalate", outcome: "executed", detail: reason });
-      return finalize({ status: "escalated", reason });
+
+      // Only a refusal to run an irreversible action has a concrete action to have
+      // performed or skipped; every other reasonCode ("stuck", "unexpected_state",
+      // "cannot_complete") describes the model being unable to proceed, not a specific
+      // action — so it offers only resolved/aborted (isValidDecisionFor enforces this).
+      const kind: InterventionKind = call.args.reasonCode === "action_refused_irreversible" ? "irreversible_action" : "other";
+      const handoff = await attemptHandoff({ kind, reason, location: `turn ${modelHistory.length + 1}` });
+      if (handoff.outcome === "terminal") {
+        return finalize({ status: "escalated", reason: handoff.reason });
+      }
+      modelHistory.push({
+        toolCall: call,
+        result: `an operator resolved this escalation with signal "${handoff.signal}"; the page has been re-observed since — judge for yourself whether the action you were concerned about actually happened before deciding what to do next`,
+      });
+      continue;
     }
 
     if (call.tool === "done") {
@@ -499,7 +607,7 @@ export async function discover(
       // Re-verify against a freshly-taken snapshot, not the one the proof was derived from —
       // never assume a click worked (CLAUDE.md's artifact rules), and never trust a proof
       // chosen a moment ago without confirming reality still matches right before finalizing.
-      const freshSnapshot = await adapter.snapshot();
+      const freshSnapshot = await controlGate.adapter.snapshot();
       if (!evaluateCheckpoint(derived.checkpoint, freshSnapshot)) {
         const detail = "refused: the derived checkpoint is not true against a freshly-taken snapshot";
         modelHistory.push({ toolCall: call, result: detail });
@@ -523,7 +631,7 @@ export async function discover(
       }
       try {
         const frameField = frameFieldFor(snapshot, call.args.frameId);
-        await adapter.click(gate.locator, frameField.frame);
+        await controlGate.adapter.click(gate.locator, frameField.frame);
         steps.push({
           id: nextStepId("click"),
           action: "click",
@@ -562,9 +670,9 @@ export async function discover(
       try {
         const frameField = frameFieldFor(snapshot, call.args.frameId);
         if (call.tool === "type") {
-          await adapter.type(gate.locator, inputSpec.value, frameField.frame);
+          await controlGate.adapter.type(gate.locator, inputSpec.value, frameField.frame);
         } else {
-          await adapter.select(gate.locator, inputSpec.value, frameField.frame);
+          await controlGate.adapter.select(gate.locator, inputSpec.value, frameField.frame);
         }
         if (inputSpec.sensitivity === "secret") {
           redactedRefs.add(refKey(call.args.frameId, call.args.ref));
@@ -614,7 +722,7 @@ export async function discover(
     }
     try {
       const frameField = frameFieldFor(snapshot, call.args.frameId);
-      const readResult = await adapter.read(gate.locator, frameField.frame);
+      const readResult = await controlGate.adapter.read(gate.locator, frameField.frame);
       writtenOutputs.add(outputName);
       knownValues.push({ value: readResult.value, sensitivity: outputSpec.sensitivity });
       steps.push({

@@ -211,6 +211,7 @@ describe("writeDiscoveryEvidence", () => {
       recoveries: ["maintenance_interstitial"],
       durationMs: 4200,
       knownSensitiveValues: ["Elena Cho"],
+      interventions: [],
     };
 
     const adapter = new FakeAdapter();
@@ -248,6 +249,7 @@ describe("writeDiscoveryEvidence", () => {
       recoveries: [],
       durationMs: 900,
       knownSensitiveValues: [],
+      interventions: [],
     };
 
     const adapter = new FakeAdapter();
@@ -305,6 +307,7 @@ describe("the default evidence directory is resolved relative to the repo root, 
         recoveries: [],
         durationMs: 1,
         knownSensitiveValues: [],
+        interventions: [],
       };
       written = await writeDiscoveryEvidence(
         { description: "x", entryPoint: "/x", inputs: {} },

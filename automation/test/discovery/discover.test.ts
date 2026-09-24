@@ -3,8 +3,25 @@ import type { Snapshot } from "../../adapter/snapshotParser.js";
 import type { AppProfile } from "../../schema/appProfile.js";
 import { discover, type DiscoveryGoal } from "../../discovery/discover.js";
 import type { DiscoveryContext, DiscoveryModel, ModelTurn } from "../../discovery/model.js";
+import type { EscalationHandler, InterventionDecision, InterventionRequest } from "../../escalation.js";
 import { FakeAdapter, snapshotOf } from "../support/fakeAdapter.js";
 import { FakeModel } from "../support/fakeModel.js";
+
+/**
+ * Scripts an EscalationHandler's decisions in order, repeating the last one once
+ * exhausted (mirrors FakeAdapter.snapshotQueue's own "repeat the last" convention).
+ * Records every request it was handed, in order — see executor/replay.test.ts's
+ * identical helper for the same rationale.
+ */
+function fakeHandler(...decisions: InterventionDecision[]): { handler: EscalationHandler; requests: InterventionRequest[] } {
+  const requests: InterventionRequest[] = [];
+  const handler: EscalationHandler = async (request) => {
+    requests.push(request);
+    const decision = decisions[requests.length - 1] ?? decisions[decisions.length - 1]!;
+    return decision;
+  };
+  return { handler, requests };
+}
 
 const ENTRY_URL = "http://localhost/start";
 
@@ -478,6 +495,153 @@ describe("discover — a hard HTTP failure (5xx) ends discovery with http_error"
     if (result.status === "http_error") {
       expect(result.httpStatus).toBe(502);
     }
+    expect(model.contextsSeen).toHaveLength(0);
+  });
+});
+
+describe("discover — escalation handoff (onEscalation)", () => {
+  it("does not change behavior when onEscalation is unset — the full existing suite above already proves this, this just names it", async () => {
+    const page = snapshotAt('- button "A"\n');
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page];
+    const model = new FakeModel();
+    model.turnQueue = [{ kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } }];
+
+    const result = await discover(baseGoal, baseAppProfile, adapter, model);
+
+    expect(result.status).toBe("escalated");
+    expect(result.interventions).toEqual([]);
+  });
+
+  it("resolved on a non-action escalation re-observes and continues the loop, noting the handoff in the model's own history", async () => {
+    const page = snapshotAt('- button "Refresh"\n');
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page]; // repeats forever — nothing about the page itself matters here
+    const model = new FakeModel();
+    model.turnQueue = [
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } },
+    ];
+    const { handler, requests } = fakeHandler({ signal: "resolved" }, { signal: "aborted" });
+
+    const result = await discover(baseGoal, baseAppProfile, adapter, model, { onEscalation: handler });
+
+    // The first escalation resumed (resolved), so the model was asked a second time; the
+    // second escalation was aborted, which is what actually ends the run.
+    expect(model.contextsSeen).toHaveLength(2);
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason.toLowerCase()).toContain("aborted");
+    }
+    expect(result.interventions).toHaveLength(2);
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "resolved" } });
+    expect(result.interventions[1]).toMatchObject({ decision: { signal: "aborted" } });
+    expect(requests[0]).toMatchObject({ kind: "other", runKind: "discovery", subject: baseGoal.description });
+
+    // Discovery's own asymmetry with replay: no verification happens automatically — the
+    // model is simply told an operator resolved things and left to judge for itself on
+    // the next turn, via a plain history entry (never raw page content).
+    const secondContextHistory = model.contextsSeen[1]!.history;
+    expect(secondContextHistory.some((e) => e.toolCall.tool === "escalate" && /operator/i.test(e.result))).toBe(true);
+  });
+
+  it("performed on an action_refused_irreversible escalation re-observes without verification — the stated asymmetry with replay", async () => {
+    const page = snapshotAt('- button "Delete Account"\n');
+    const profile: AppProfile = {
+      ...baseAppProfile,
+      irreversibleControls: [{ role: "button", name: "Delete Account", exact: true }],
+    };
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page];
+    const model = new FakeModel();
+    model.turnQueue = [
+      { kind: "tool_call", call: { tool: "click", args: { frameId: "main", ref: refOf(page, "button", "Delete Account") } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "action_refused_irreversible" } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } },
+    ];
+    const { handler, requests } = fakeHandler({ signal: "performed" }, { signal: "aborted" });
+
+    const result = await discover(baseGoal, profile, adapter, model, { onEscalation: handler });
+
+    // Discovery never executes an irreversible control itself, handoff or not — "performed"
+    // means the operator did it live in the browser, not that discovery's own refusal lifts.
+    expect(adapter.clickLog).toHaveLength(0);
+    expect(requests[0]).toMatchObject({ kind: "irreversible_action", reason: expect.stringContaining("action_refused_irreversible") });
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "performed" } });
+    expect(model.contextsSeen).toHaveLength(3); // click, then the irreversible escalation, then resumed and asked again after "performed"
+    expect(result.status).toBe("escalated"); // ended by the second escalation's abort, not the first
+  });
+
+  it("skipped on an action_refused_irreversible escalation is equally valid and also just re-observes — no continuesAfterSkip concept in discovery", async () => {
+    const page = snapshotAt('- button "Delete Account"\n');
+    const profile: AppProfile = {
+      ...baseAppProfile,
+      irreversibleControls: [{ role: "button", name: "Delete Account", exact: true }],
+    };
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page];
+    const model = new FakeModel();
+    model.turnQueue = [
+      { kind: "tool_call", call: { tool: "click", args: { frameId: "main", ref: refOf(page, "button", "Delete Account") } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "action_refused_irreversible" } } },
+      { kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } },
+    ];
+    const { handler } = fakeHandler({ signal: "skipped" }, { signal: "aborted" });
+
+    const result = await discover(baseGoal, profile, adapter, model, { onEscalation: handler });
+
+    expect(result.interventions[0]).toMatchObject({ decision: { signal: "skipped" } });
+    expect(model.contextsSeen).toHaveLength(3); // click, then the irreversible escalation, then resumed and asked again after "skipped"
+    expect(result.status).toBe("escalated");
+  });
+
+  it("an invalid signal for the escalation's kind ends the run rather than guessing intent", async () => {
+    const page = snapshotAt('- button "A"\n');
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [page];
+    const model = new FakeModel();
+    // "stuck" has no concrete action to have performed — only resolved/aborted are valid.
+    model.turnQueue = [{ kind: "tool_call", call: { tool: "escalate", args: { reasonCode: "stuck" } } }];
+    const { handler } = fakeHandler({ signal: "performed" });
+
+    const result = await discover(baseGoal, baseAppProfile, adapter, model, { onEscalation: handler });
+
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason).toContain('not valid');
+    }
+    expect(model.contextsSeen).toHaveLength(1); // never asked again — the run ended right there
+  });
+
+  it("recovery_exhausted also routes through the handoff (kind 'other'), not just the model's own escalate", async () => {
+    const interstitial = snapshotAt('- heading "Maintenance" [level=1]\n- button "Dismiss"\n');
+    const profile: AppProfile = {
+      ...baseAppProfile,
+      recoveries: [
+        {
+          name: "maintenance_interstitial",
+          detect: [{ headingEquals: "Maintenance" }],
+          action: {
+            kind: "dismiss",
+            locator: [{ kind: "role", role: "button", name: "Dismiss", exact: true, rationale: "the only control" }],
+          },
+        },
+      ],
+    };
+    const adapter = new FakeAdapter();
+    adapter.snapshotQueue = [interstitial]; // never clears — the default per-rule limit (3) is exceeded on the 4th sighting
+    const model = new FakeModel(); // never reached — recovery_exhausted fires before the model is ever asked
+    const { handler, requests } = fakeHandler({ signal: "aborted" });
+
+    const result = await discover(baseGoal, profile, adapter, model, { onEscalation: handler });
+
+    expect(result.status).toBe("escalated");
+    if (result.status === "escalated") {
+      expect(result.reason).toContain("maintenance_interstitial");
+      expect(result.reason.toLowerCase()).toContain("aborted");
+    }
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ kind: "other", runKind: "discovery" });
     expect(model.contextsSeen).toHaveLength(0);
   });
 });
